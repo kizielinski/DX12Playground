@@ -9,6 +9,7 @@
 // We can include the correct library files here
 // instead of in Visual Studio settings if we want
 #pragma comment(lib, "d3d12.lib")
+#pragma comment(lib, "dxgi.lib")
 
 class DXCore
 {
@@ -61,12 +62,48 @@ protected:
 
 	// DirectX related objects and variables
 	D3D_FEATURE_LEVEL		dxFeatureLevel;
-	Microsoft::WRL::ComPtr<IDXGISwapChain>		swapChain;
-	Microsoft::WRL::ComPtr<ID3D11Device>		device;
+	Microsoft::WRL::ComPtr<ID3D12Device> device;
+	Microsoft::WRL::ComPtr<IDXGISwapChain> swapChain; ///<---Doesn't handle buffers for us anymore and we have to TRACK them
+	/*Microsoft::WRL::ComPtr<ID3D11Device>		device;
 	Microsoft::WRL::ComPtr<ID3D11DeviceContext>	context;
 
 	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> backBufferRTV;
-	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depthStencilView;
+	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depthStencilView;*/ //Depricated in DX12
+
+	//Shares functions that dx11 context did, used for:
+	//Draw, Changing Vertex/Index buffers, change other pieces of pipeline
+	//Not immediate, just a list of commands that will be sent to GPU
+	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commandList; 
+
+	//Need memory for commands that will be sent to GPU
+	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> commandAllocator;
+
+	//Will execute the set(s) of commands from commandLists, 
+	//and set them to be executed on the GPU
+	Microsoft::WRL::ComPtr<ID3D12CommandQueue> commandQueue;
+
+	//Buffers
+	static const int numBackBuffers = 2;
+	unsigned int currentSwapBuffer = 0;
+	Microsoft::WRL::ComPtr<ID3D12Resource> backBuffers[numBackBuffers]; //Were stored as RTV and DSV respectively, no longer the case, must manually hold the pointers
+	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilBuffer;
+
+	//Chunks of memory that holds our descriptor, specifically here for our rtv and dsv. 
+	unsigned int rtvDescriptorSize; //Ask GPU for its descriptor size.
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvHeap; //Can hold many, only one here rn
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsvHeap; //""			""			""
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[numBackBuffers]; //Effectively these are both pointers, points to where these views are in GPU memory
+	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle;
+
+	D3D12_VIEWPORT viewport; //How much of the screen am I rendering into? X by Y pixels, can be whole thing, just a portion, etc.
+	D3D12_RECT scissorRect; //Occurs AFTER the pixel shader. Doesn't have to do anything, but must be defined. Allows removal of pixels in final product (UI).
+
+	Microsoft::WRL::ComPtr<ID3D12Fence> fence; //Division between work, tracks when tasks are completed on the GPU;
+	HANDLE fenceEvent;
+	unsigned long currentFence = 0; //Tracks which current fence we are at in the commandQueue.
+
+	void WaitForGPU();
+	void CloseExecuteAndResetCommandList();
 
 	// Helper function for allocating a console window
 	void CreateConsoleWindow(int bufferLines, int bufferColumns, int windowLines, int windowColumns);

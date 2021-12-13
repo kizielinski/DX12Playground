@@ -20,13 +20,16 @@ public:
 	void Draw(float deltaTime, float totalTime);
 
 private:
-
+	
+	// Initialization helper methods - feel free to customize, combine, etc.
 	// Should we use vsync to limit the frame rate?
 	bool vsync;
-
-	// Initialization helper methods - feel free to customize, combine, etc.
-	void LoadShaders(); 
+	void CreateRootSigAndPipelineState();
+	HRESULT CreateStaticBuffer(unsigned int dataStride, unsigned int dataCount, void* data, ID3D12Resource**
+		buffer);
 	void CreateBasicGeometry();
+	//void LoadShaders(); <--Depricated from DX11
+	
 
 	// Note the usage of ComPtr below
 	//  - This is a smart pointer for objects that abide by the
@@ -34,13 +37,17 @@ private:
 	//  - More info here: https://github.com/Microsoft/DirectXTK/wiki/ComPtr
 
 	// Buffers to hold actual geometry data
-	Microsoft::WRL::ComPtr<ID3D11Buffer> vertexBuffer;
-	Microsoft::WRL::ComPtr<ID3D11Buffer> indexBuffer;
+	Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuffer;
+	Microsoft::WRL::ComPtr<ID3D12Resource> indexBuffer;
+
+	D3D12_VERTEX_BUFFER_VIEW vbView;
+	D3D12_INDEX_BUFFER_VIEW ibView;
 	
-	// Shaders and shader-related constructs
-	Microsoft::WRL::ComPtr<ID3D11PixelShader> pixelShader;
-	Microsoft::WRL::ComPtr<ID3D11VertexShader> vertexShader;
-	Microsoft::WRL::ComPtr<ID3D11InputLayout> inputLayout;
+	// Shaders and shader-related constructs now located in a PipelineState
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState;
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
+	
+	
 
 };
 

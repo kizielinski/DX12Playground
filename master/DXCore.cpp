@@ -166,119 +166,206 @@ HRESULT DXCore::InitWindow()
 // --------------------------------------------------------
 HRESULT DXCore::InitDirectX()
 {
-	// This will hold options for DirectX initialization
-	unsigned int deviceFlags = 0;
-
 #if defined(DEBUG) || defined(_DEBUG)
-	// If we're in debug mode in visual studio, we also
-	// want to make a "Debug DirectX Device" to see some
-	// errors and warnings in Visual Studio's output window
-	// when things go wrong!
-	deviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+	// Enable debug layer for runtime debug errors/warnings in visual studio output (Don't forget to check this)
+	ID3D12Debug* debugController;
+	D3D12GetDebugInterface(IID_PPV_ARGS(&debugController));
+	debugController->EnableDebugLayer();
 #endif
-
-	// Create a description of how our swap
-	// chain should work
-	DXGI_SWAP_CHAIN_DESC swapDesc = {};
-	swapDesc.BufferCount = 2;
-	swapDesc.BufferDesc.Width = width;
-	swapDesc.BufferDesc.Height = height;
-	swapDesc.BufferDesc.RefreshRate.Numerator = 60;
-	swapDesc.BufferDesc.RefreshRate.Denominator = 1;
-	swapDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	swapDesc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-	swapDesc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-	swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-	swapDesc.Flags = 0;
-	swapDesc.OutputWindow = hWnd;
-	swapDesc.SampleDesc.Count = 1;
-	swapDesc.SampleDesc.Quality = 0;
-	swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-	swapDesc.Windowed = true;
 
 	// Result variable for below function calls
 	HRESULT hr = S_OK;
-
-	// Attempt to initialize DirectX
-	hr = D3D11CreateDeviceAndSwapChain(
-		0,							// Video adapter (physical GPU) to use, or null for default
-		D3D_DRIVER_TYPE_HARDWARE,	// We want to use the hardware (GPU)
-		0,							// Used when doing software rendering
-		deviceFlags,				// Any special options
-		0,							// Optional array of possible verisons we want as fallbacks
-		0,							// The number of fallbacks in the above param
-		D3D11_SDK_VERSION,			// Current version of the SDK
-		&swapDesc,					// Address of swap chain options
-		swapChain.GetAddressOf(),	// Pointer to our Swap Chain pointer
-		device.GetAddressOf(),		// Pointer to our Device pointer
-		&dxFeatureLevel,			// This will hold the actual feature level the app will use
-		context.GetAddressOf());	// Pointer to our Device Context pointer
-	if (FAILED(hr)) return hr;
-
-	// The above function created the back buffer render target
-	// for us, but we need a reference to it
-	ID3D11Texture2D* backBufferTexture = 0;
-	swapChain->GetBuffer(
-		0,
-		__uuidof(ID3D11Texture2D),
-		(void**)&backBufferTexture);
-
-	// Now that we have the texture, create a render target view
-	// for the back buffer so we can render into it.  Then release
-	// our local reference to the texture, since we have the view.
-	if (backBufferTexture != 0)
+	// Create the DX 12 device and check the feature level
 	{
-		device->CreateRenderTargetView(
-			backBufferTexture,
-			0,
-			backBufferRTV.GetAddressOf());
-		backBufferTexture->Release();
+		hr = D3D12CreateDevice(
+			0, // Not explicitly specifying which adapter (GPU)
+			D3D_FEATURE_LEVEL_11_0, // MINIMUM feature level - NOT the level we'll necessarily turn on
+			IID_PPV_ARGS(device.GetAddressOf())); // Macro to grab necessary IDs of device
+		if (FAILED(hr)) return hr;
+		// Now that we have a device, determine the maximum
+		// feature level supported by the device
+		D3D_FEATURE_LEVEL levelsToCheck[] = {
+		D3D_FEATURE_LEVEL_11_0,
+		D3D_FEATURE_LEVEL_11_1,
+		D3D_FEATURE_LEVEL_12_0,
+		D3D_FEATURE_LEVEL_12_1
+		};
+		D3D12_FEATURE_DATA_FEATURE_LEVELS levels = {};
+		levels.pFeatureLevelsRequested = levelsToCheck;
+		levels.NumFeatureLevels = ARRAYSIZE(levelsToCheck);
+		device->CheckFeatureSupport(
+			D3D12_FEATURE_FEATURE_LEVELS,
+			&levels,
+			sizeof(D3D12_FEATURE_DATA_FEATURE_LEVELS)); //Establishes what the device is capable of.
+		dxFeatureLevel = levels.MaxSupportedFeatureLevel;
 	}
 
-	// Set up the description of the texture to use for the depth buffer
-	D3D11_TEXTURE2D_DESC depthStencilDesc = {};
-	depthStencilDesc.Width				= width;
-	depthStencilDesc.Height				= height;
-	depthStencilDesc.MipLevels			= 1;
-	depthStencilDesc.ArraySize			= 1;
-	depthStencilDesc.Format				= DXGI_FORMAT_D24_UNORM_S8_UINT;
-	depthStencilDesc.Usage				= D3D11_USAGE_DEFAULT;
-	depthStencilDesc.BindFlags			= D3D11_BIND_DEPTH_STENCIL;
-	depthStencilDesc.CPUAccessFlags		= 0;
-	depthStencilDesc.MiscFlags			= 0;
-	depthStencilDesc.SampleDesc.Count	= 1;
-	depthStencilDesc.SampleDesc.Quality = 0;
-
-	// Create the depth buffer and its view, then 
-	// release our reference to the texture
-	ID3D11Texture2D* depthBufferTexture = 0;
-	device->CreateTexture2D(&depthStencilDesc, 0, &depthBufferTexture);
-	if (depthBufferTexture != 0)
+	// Set up DX12 command allocator / queue / list, 
+	// which are necessary pieces for issuing standard API calls
 	{
+		// Set up allocator
+		device->CreateCommandAllocator(
+			D3D12_COMMAND_LIST_TYPE_DIRECT,
+			IID_PPV_ARGS(commandAllocator.GetAddressOf()));
+
+		// Command queue
+		D3D12_COMMAND_QUEUE_DESC qDesc = {};
+		qDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+		qDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+		device->CreateCommandQueue(&qDesc, IID_PPV_ARGS(commandQueue.GetAddressOf()));
+
+		// Command list
+		device->CreateCommandList(
+			0, // Which physical GPU will handle these tasks?  0 for single GPU setup
+			D3D12_COMMAND_LIST_TYPE_DIRECT, // Type of command list - direct is for standard API calls
+			commandAllocator.Get(), // The allocator for this list
+			0, // Initial pipeline state - none for now
+			IID_PPV_ARGS(commandList.GetAddressOf()));
+	}
+
+	// Swap chain creation
+	{
+		// Create a description of how our swap chain should work
+		DXGI_SWAP_CHAIN_DESC swapDesc = {};
+		swapDesc.BufferCount = numBackBuffers;
+		swapDesc.BufferDesc.Width = width;
+		swapDesc.BufferDesc.Height = height;
+		swapDesc.BufferDesc.RefreshRate.Numerator = 60;
+		//swapDesc.BufferDesc.RefreshRate.Numerator = 144; Ask Chris?
+		swapDesc.BufferDesc.RefreshRate.Denominator = 1;
+		swapDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		swapDesc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+		swapDesc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+		swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+		swapDesc.Flags = 0;
+		swapDesc.OutputWindow = hWnd;
+		swapDesc.SampleDesc.Count = 1;
+		swapDesc.SampleDesc.Quality = 0;
+		swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+		swapDesc.Windowed = true;
+
+		// Create a DXGI factory, which is what we use to create a swap chain
+		Microsoft::WRL::ComPtr<IDXGIFactory> dxgiFactory;
+		CreateDXGIFactory(IID_PPV_ARGS(dxgiFactory.GetAddressOf()));
+		hr = dxgiFactory->CreateSwapChain(commandQueue.Get(), &swapDesc, swapChain.GetAddressOf());
+	}
+
+	// Create back buffers
+	{
+		// What is the increment size between RTV descriptors in a
+		// descriptor heap?  This differs per GPU so we need to 
+		// get it at applications start up
+		rtvDescriptorSize = device -> GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+		// First create a descriptor heap for RTVs
+		D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
+		rtvHeapDesc.NumDescriptors = numBackBuffers;
+		rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+		device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(rtvHeap.GetAddressOf()));
+
+		// Now create the RTV handles for each buffer (buffers were created by the swap chain)
+		for (unsigned int i = 0; i < numBackBuffers; i++)
+		{
+			// Grab this buffer from the swap chain
+			swapChain->GetBuffer(i, IID_PPV_ARGS(backBuffers[i].GetAddressOf()));
+
+			// Make a handle for it
+			rtvHandles[i] = rtvHeap->GetCPUDescriptorHandleForHeapStart();
+			rtvHandles[i].ptr += rtvDescriptorSize * i; //Offset by size of descriptor, ex. 2nd one starts at the end of memory of the first descriptor.
+
+			// Create the render target view
+			device->CreateRenderTargetView(backBuffers[i].Get(), 0, rtvHandles[i]);
+		}
+	}
+
+	// Create depth/stencil buffer
+	{
+		// Create a descriptor heap for DSV
+		D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
+		dsvHeapDesc.NumDescriptors = 1;
+		dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+		device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(dsvHeap.GetAddressOf()));
+
+		// Describe the depth stencil buffer resource
+		D3D12_RESOURCE_DESC depthBufferDesc = {}; //All description structs are now all one type: RESOURCE. Generalizes it, but means we have to fill out more.
+		depthBufferDesc.Alignment = 0;
+		depthBufferDesc.DepthOrArraySize = 1;
+		depthBufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		depthBufferDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+		depthBufferDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT; //(S8) A stencil buffer is used to mask pixels in an image, we have not implemented this.
+		depthBufferDesc.Height = height;
+		depthBufferDesc.Width = width;
+		depthBufferDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+		depthBufferDesc.MipLevels = 1;
+		depthBufferDesc.SampleDesc.Count = 1;
+		depthBufferDesc.SampleDesc.Quality = 0;
+
+		// Describe the clear value that will most often be used
+		// for this buffer (which optimizes the clearing of the buffer)
+		D3D12_CLEAR_VALUE clear = {};
+		clear.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+		clear.DepthStencil.Depth = 1.0f;
+		clear.DepthStencil.Stencil = 0;
+
+		// Describe the memory heap that will house this resource
+		//Optimizations and where things live in memory.
+		D3D12_HEAP_PROPERTIES props = {};
+		props.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		props.CreationNodeMask = 1;
+		props.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+		props.Type = D3D12_HEAP_TYPE_DEFAULT; //This definition is most important piece, probably the only piece we would change if at all.
+		props.VisibleNodeMask = 1;
+
+		// Actually create the resource, and the heap in which it
+		// will reside, and map the resource to that heap
+		device->CreateCommittedResource(
+			&props,
+			D3D12_HEAP_FLAG_NONE,
+			&depthBufferDesc,
+			D3D12_RESOURCE_STATE_DEPTH_WRITE, //Only allows writing of Depth information.
+			&clear,
+			IID_PPV_ARGS(depthStencilBuffer.GetAddressOf())); //Gets it into GPU memory for usage
+
+		// Get the handle to the Depth Stencil View that we'll
+		// be using for the depth buffer.  The DSV is stored in
+		// our DSV-specific descriptor Heap.
+		dsvHandle = dsvHeap->GetCPUDescriptorHandleForHeapStart(); //Use this to swap on runtime.
+
+		// Actually make the DSV
 		device->CreateDepthStencilView(
-			depthBufferTexture, 
-			0, 
-			depthStencilView.GetAddressOf());
-		depthBufferTexture->Release();
+			depthStencilBuffer.Get(),
+			0, // Default view (first mip)
+			dsvHandle);
 	}
 
-	// Bind the views to the pipeline, so rendering properly 
-	// uses their underlying textures
-	context->OMSetRenderTargets(
-		1, 
-		backBufferRTV.GetAddressOf(), 
-		depthStencilView.Get());
+	// Create a fence and a fence event for maintaining
+	// synchronization with the GPU
+	device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.GetAddressOf()));
+	fenceEvent = CreateEventEx(0, 0, 0, EVENT_ALL_ACCESS);
 
-	// Lastly, set up a viewport so we render into
-	// to correct portion of the window
-	D3D11_VIEWPORT viewport = {};
-	viewport.TopLeftX	= 0;
-	viewport.TopLeftY	= 0;
-	viewport.Width		= (float)width;
-	viewport.Height		= (float)height;
-	viewport.MinDepth	= 0.0f;
-	viewport.MaxDepth	= 1.0f;
-	context->RSSetViewports(1, &viewport);
+	// Set up the viewport so we render into the correct
+	// portion of the render target
+	viewport = {};
+	viewport.TopLeftX = 0;
+	viewport.TopLeftY = 0;
+	viewport.Width = (float)width;
+	viewport.Height = (float)height;
+	viewport.MinDepth = 0.0f;
+	viewport.MaxDepth = 1.0f;
+
+	// Define a scissor rectangle that defines a portion of
+	// the render target for clipping.  This is different from
+	// a viewport in that it is applied after the pixel shader.
+	// We need at least one of these, but we're rendering to 
+	// the entire window, so it'll be the same size.
+	scissorRect = {};
+	scissorRect.left = 0;
+	scissorRect.top = 0;
+	scissorRect.right = width;
+	scissorRect.bottom = height;
+
+	// Wait for the GPU to catch up
+	WaitForGPU();
 
 	// Return the "everything is ok" HRESULT value
 	return S_OK;
@@ -294,75 +381,153 @@ HRESULT DXCore::InitDirectX()
 // --------------------------------------------------------
 void DXCore::OnResize()
 {
-	// Release the buffers before resizing the swap chain
-	backBufferRTV.Reset();
-	depthStencilView.Reset();
+	// Wait for the GPU to finish all work, since we'll
+	// be destroying and recreating resources
+	WaitForGPU();
 
-	// Resize the underlying swap chain buffers
-	swapChain->ResizeBuffers(
-		2,
-		width,
-		height,
-		DXGI_FORMAT_R8G8B8A8_UNORM,
-		0);
+	// Release the back buffers using ComPtr's Reset()
+	for (unsigned int i = 0; i < numBackBuffers; i++)
+		backBuffers[i].Reset();
 
-	// Recreate the render target view for the back buffer
-	// texture, then release our local texture reference
-	ID3D11Texture2D* backBufferTexture = 0;
-	swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&backBufferTexture));
-	if (backBufferTexture != 0)
+	// Resize the swap chain (assuming a basic color format here)
+	swapChain->ResizeBuffers(numBackBuffers, width, height, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
+
+	// Go through the steps to setup the back buffers again
+	// Note: This assumes the descriptor heap already exists
+	// and that the rtvDescriptorSize was previously set
+	for (unsigned int i = 0; i < numBackBuffers; i++)
 	{
-		device->CreateRenderTargetView(
-			backBufferTexture, 
-			0, 
-			backBufferRTV.ReleaseAndGetAddressOf()); // ReleaseAndGetAddressOf() cleans up the old object before giving us the pointer
-		backBufferTexture->Release();
+		// Grab this buffer from the swap chain
+		swapChain->GetBuffer(i, IID_PPV_ARGS(backBuffers[i].GetAddressOf()));
+		// Make a handle for it
+		rtvHandles[i] = rtvHeap->GetCPUDescriptorHandleForHeapStart();
+		rtvHandles[i].ptr += rtvDescriptorSize * i;
+		// Create the render target view
+		device->CreateRenderTargetView(backBuffers[i].Get(), 0, rtvHandles[i]);
 	}
 
-	// Set up the description of the texture to use for the depth buffer
-	D3D11_TEXTURE2D_DESC depthStencilDesc;
-	depthStencilDesc.Width				= width;
-	depthStencilDesc.Height				= height;
-	depthStencilDesc.MipLevels			= 1;
-	depthStencilDesc.ArraySize			= 1;
-	depthStencilDesc.Format				= DXGI_FORMAT_D24_UNORM_S8_UINT;
-	depthStencilDesc.Usage				= D3D11_USAGE_DEFAULT;
-	depthStencilDesc.BindFlags			= D3D11_BIND_DEPTH_STENCIL;
-	depthStencilDesc.CPUAccessFlags		= 0;
-	depthStencilDesc.MiscFlags			= 0;
-	depthStencilDesc.SampleDesc.Count	= 1;
-	depthStencilDesc.SampleDesc.Quality = 0;
+	// Reset back to the first back buffer
+	currentSwapBuffer = 0;
 
-	// Create the depth buffer and its view, then 
-	// release our reference to the texture
-	ID3D11Texture2D* depthBufferTexture = 0;
-	device->CreateTexture2D(&depthStencilDesc, 0, &depthBufferTexture);
-	if (depthBufferTexture != 0)
+	// Reset the depth buffer and create it again
 	{
+		depthStencilBuffer.Reset();
+		// Describe the depth stencil buffer resource
+		D3D12_RESOURCE_DESC depthBufferDesc = {};
+		depthBufferDesc.Alignment = 0;
+		depthBufferDesc.DepthOrArraySize = 1;
+		depthBufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		depthBufferDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+		depthBufferDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+		depthBufferDesc.Height = height;
+		depthBufferDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+		depthBufferDesc.MipLevels = 1;
+		depthBufferDesc.SampleDesc.Count = 1;
+		depthBufferDesc.SampleDesc.Quality = 0;
+		depthBufferDesc.Width = width;
+
+		// Describe the clear value that will most often be used
+		// for this buffer (which optimizes the clearing of the buffer)
+		D3D12_CLEAR_VALUE clear = {};
+		clear.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+		clear.DepthStencil.Depth = 1.0f;
+		clear.DepthStencil.Stencil = 0;
+
+		// Describe the memory heap that will house this resource
+		D3D12_HEAP_PROPERTIES props = {};
+		props.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		props.CreationNodeMask = 1;
+		props.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+		props.Type = D3D12_HEAP_TYPE_DEFAULT;
+		props.VisibleNodeMask = 1;
+
+		// Actually create the resource, and the heap in which it
+		// will reside, and map the resource to that heap
+		device->CreateCommittedResource(
+			&props,
+			D3D12_HEAP_FLAG_NONE,
+			&depthBufferDesc,
+			D3D12_RESOURCE_STATE_DEPTH_WRITE,
+			&clear,
+			IID_PPV_ARGS(depthStencilBuffer.GetAddressOf()));
+
+		// Now recreate the depth stencil view
+		dsvHandle = dsvHeap->GetCPUDescriptorHandleForHeapStart();
 		device->CreateDepthStencilView(
-			depthBufferTexture, 
-			0, 
-			depthStencilView.ReleaseAndGetAddressOf()); // ReleaseAndGetAddressOf() cleans up the old object before giving us the pointer
-		depthBufferTexture->Release();
+			depthStencilBuffer.Get(),
+			0, // Default view (first mip)
+			dsvHandle);
 	}
 
-	// Bind the views to the pipeline, so rendering properly 
-	// uses their underlying textures
-	context->OMSetRenderTargets(
-		1, 
-		backBufferRTV.GetAddressOf(), // This requires a pointer to a pointer (an array of pointers), so we get the address of the pointer
-		depthStencilView.Get());
+	// Recreate the viewport and scissor rects, too,
+	// since the window size has changed
+	{
+		// Set up the viewport so we render into the correct
+		// portion of the render target
+		viewport = {};
+		viewport.TopLeftX = 0;
+		viewport.TopLeftY = 0;
+		viewport.Width = (float)width;
+		viewport.Height = (float)height;
+		viewport.MinDepth = 0.0f;
+		viewport.MaxDepth = 1.0f;
 
-	// Lastly, set up a viewport so we render into
-	// to correct portion of the window
-	D3D11_VIEWPORT viewport = {};
-	viewport.TopLeftX = 0;
-	viewport.TopLeftY = 0;
-	viewport.Width = (float)width;
-	viewport.Height = (float)height;
-	viewport.MinDepth = 0.0f;
-	viewport.MaxDepth = 1.0f;
-	context->RSSetViewports(1, &viewport);
+		// Define a scissor rectangle that defines a portion of
+		// the render target for clipping.  This is different from
+		// a viewport in that it is applied after the pixel shader.
+		// We need at least one of these, but we're rendering to 
+		// the entire window, so it'll be the same size.
+		scissorRect = {};
+		scissorRect.left = 0;
+		scissorRect.top = 0;
+		scissorRect.right = width;
+		scissorRect.bottom = height;
+	}
+
+	// Wait for the GPU before we proceed
+	WaitForGPU();
+}
+
+// --------------------------------------------------------
+// Makes our C++ code wait for the GPU to finish its
+// current batch of work before moving on.
+// --------------------------------------------------------
+void DXCore::WaitForGPU()
+{
+	// Update our ongoing fence value (a unique index for each "stop sign")
+	// and then place that value into the GPU's command queue
+	currentFence++;
+	commandQueue->Signal(fence.Get(), currentFence);
+	// Check to see if the most recently completed fence value
+	// is less than the one we just set.
+	if (fence->GetCompletedValue() < currentFence)
+	{
+		// Tell the fence to let us know when it's hit, and then
+		// sit an wait until that fence is hit.
+		fence->SetEventOnCompletion(currentFence, fenceEvent);
+		WaitForSingleObject(fenceEvent, INFINITE);
+	}
+}
+
+// --------------------------------------------------------
+// Closes the current command list and tells the GPU to
+// start executing those commands.  We also wait for
+// the GPU to finish this work so we can reset the
+// command allocator (which CANNOT be reset while the
+// GPU is using its commands) and the command list itself.
+// --------------------------------------------------------
+void DXCore::CloseExecuteAndResetCommandList()
+{
+	// Close the current list and execute it as our only list
+	commandList->Close();
+	ID3D12CommandList* lists[] = { commandList.Get() };
+	commandQueue->ExecuteCommandLists(1, lists); //Set it up to be executed now.
+
+	// Always wait before reseting command allocator, as it should not
+	// be reset while the GPU is processing a command list
+	WaitForGPU();
+	commandAllocator->Reset(); //Don't reset until GPU has caught up. It'd be more desirable to have multiple allocators to be able to que up commandLists for additional frames. 
+	commandList->Reset(commandAllocator.Get(), 0); //Once allocator is rest, then reset commandList.
 }
 
 
@@ -486,6 +651,8 @@ void DXCore::UpdateTitleBarStats()
 	// Append the version of DirectX the app is using
 	switch (dxFeatureLevel)
 	{
+	case D3D_FEATURE_LEVEL_12_1: output << "    DX 12.1"; break;
+	case D3D_FEATURE_LEVEL_12_0: output << "    DX 12.0"; break;
 	case D3D_FEATURE_LEVEL_11_1: output << "    DX 11.1"; break;
 	case D3D_FEATURE_LEVEL_11_0: output << "    DX 11.0"; break;
 	case D3D_FEATURE_LEVEL_10_1: output << "    DX 10.1"; break;
