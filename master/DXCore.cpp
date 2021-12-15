@@ -1,5 +1,6 @@
 #include "DXCore.h"
 #include "Input.h"
+#include "DX12Helper.h"
 
 #include <WindowsX.h>
 #include <sstream>
@@ -76,6 +77,7 @@ DXCore::~DXCore()
 
 	// Delete input manager singleton
 	delete& Input::GetInstance();
+	delete& DX12Helper::GetInstance();
 }
 
 // --------------------------------------------------------
@@ -223,6 +225,16 @@ HRESULT DXCore::InitDirectX()
 			IID_PPV_ARGS(commandList.GetAddressOf()));
 	}
 
+	// Now that we have a device and a command list stuff,
+	// we can initialize the DX12 helper singleton
+	{
+		DX12Helper::GetInstance().Initialize(
+			device,
+			commandList,
+			commandQueue,
+			commandAllocator);
+	}
+
 	// Swap chain creation
 	{
 		// Create a description of how our swap chain should work
@@ -338,11 +350,6 @@ HRESULT DXCore::InitDirectX()
 			dsvHandle);
 	}
 
-	// Create a fence and a fence event for maintaining
-	// synchronization with the GPU
-	device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.GetAddressOf()));
-	fenceEvent = CreateEventEx(0, 0, 0, EVENT_ALL_ACCESS);
-
 	// Set up the viewport so we render into the correct
 	// portion of the render target
 	viewport = {};
@@ -365,7 +372,7 @@ HRESULT DXCore::InitDirectX()
 	scissorRect.bottom = height;
 
 	// Wait for the GPU to catch up
-	WaitForGPU();
+	DX12Helper::GetInstance().WaitForGPU();
 
 	// Return the "everything is ok" HRESULT value
 	return S_OK;
@@ -381,9 +388,11 @@ HRESULT DXCore::InitDirectX()
 // --------------------------------------------------------
 void DXCore::OnResize()
 {
+	DX12Helper& dx12Helper = DX12Helper::GetInstance();
+
 	// Wait for the GPU to finish all work, since we'll
 	// be destroying and recreating resources
-	WaitForGPU();
+	dx12Helper.WaitForGPU();
 
 	// Release the back buffers using ComPtr's Reset()
 	for (unsigned int i = 0; i < numBackBuffers; i++)
@@ -399,9 +408,11 @@ void DXCore::OnResize()
 	{
 		// Grab this buffer from the swap chain
 		swapChain->GetBuffer(i, IID_PPV_ARGS(backBuffers[i].GetAddressOf()));
+
 		// Make a handle for it
 		rtvHandles[i] = rtvHeap->GetCPUDescriptorHandleForHeapStart();
 		rtvHandles[i].ptr += rtvDescriptorSize * i;
+
 		// Create the render target view
 		device->CreateRenderTargetView(backBuffers[i].Get(), 0, rtvHandles[i]);
 	}
@@ -485,50 +496,50 @@ void DXCore::OnResize()
 	}
 
 	// Wait for the GPU before we proceed
-	WaitForGPU();
+	dx12Helper.WaitForGPU();
 }
 
-// --------------------------------------------------------
-// Makes our C++ code wait for the GPU to finish its
-// current batch of work before moving on.
-// --------------------------------------------------------
-void DXCore::WaitForGPU()
-{
-	// Update our ongoing fence value (a unique index for each "stop sign")
-	// and then place that value into the GPU's command queue
-	currentFence++;
-	commandQueue->Signal(fence.Get(), currentFence);
-	// Check to see if the most recently completed fence value
-	// is less than the one we just set.
-	if (fence->GetCompletedValue() < currentFence)
-	{
-		// Tell the fence to let us know when it's hit, and then
-		// sit an wait until that fence is hit.
-		fence->SetEventOnCompletion(currentFence, fenceEvent);
-		WaitForSingleObject(fenceEvent, INFINITE);
-	}
-}
+//// --------------------------------------------------------
+//// Makes our C++ code wait for the GPU to finish its
+//// current batch of work before moving on.
+//// --------------------------------------------------------
+//void DXCore::WaitForGPU()
+//{
+//	// Update our ongoing fence value (a unique index for each "stop sign")
+//	// and then place that value into the GPU's command queue
+//	currentFence++;
+//	commandQueue->Signal(fence.Get(), currentFence);
+//	// Check to see if the most recently completed fence value
+//	// is less than the one we just set.
+//	if (fence->GetCompletedValue() < currentFence)
+//	{
+//		// Tell the fence to let us know when it's hit, and then
+//		// sit an wait until that fence is hit.
+//		fence->SetEventOnCompletion(currentFence, fenceEvent);
+//		WaitForSingleObject(fenceEvent, INFINITE);
+//	}
+//}
 
-// --------------------------------------------------------
-// Closes the current command list and tells the GPU to
-// start executing those commands.  We also wait for
-// the GPU to finish this work so we can reset the
-// command allocator (which CANNOT be reset while the
-// GPU is using its commands) and the command list itself.
-// --------------------------------------------------------
-void DXCore::CloseExecuteAndResetCommandList()
-{
-	// Close the current list and execute it as our only list
-	commandList->Close();
-	ID3D12CommandList* lists[] = { commandList.Get() };
-	commandQueue->ExecuteCommandLists(1, lists); //Set it up to be executed now.
-
-	// Always wait before reseting command allocator, as it should not
-	// be reset while the GPU is processing a command list
-	WaitForGPU();
-	commandAllocator->Reset(); //Don't reset until GPU has caught up. It'd be more desirable to have multiple allocators to be able to que up commandLists for additional frames. 
-	commandList->Reset(commandAllocator.Get(), 0); //Once allocator is rest, then reset commandList.
-}
+//// --------------------------------------------------------
+//// Closes the current command list and tells the GPU to
+//// start executing those commands.  We also wait for
+//// the GPU to finish this work so we can reset the
+//// command allocator (which CANNOT be reset while the
+//// GPU is using its commands) and the command list itself.
+//// --------------------------------------------------------
+//void DXCore::CloseExecuteAndResetCommandList()
+//{
+//	// Close the current list and execute it as our only list
+//	commandList->Close();
+//	ID3D12CommandList* lists[] = { commandList.Get() };
+//	commandQueue->ExecuteCommandLists(1, lists); //Set it up to be executed now.
+//
+//	// Always wait before reseting command allocator, as it should not
+//	// be reset while the GPU is processing a command list
+//	WaitForGPU();
+//	commandAllocator->Reset(); //Don't reset until GPU has caught up. It'd be more desirable to have multiple allocators to be able to que up commandLists for additional frames. 
+//	commandList->Reset(commandAllocator.Get(), 0); //Once allocator is rest, then reset commandList.
+//}
 
 
 // --------------------------------------------------------

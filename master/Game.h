@@ -1,8 +1,15 @@
 #pragma once
 
 #include "DXCore.h"
+#include "Mesh.h"
+#include "Entity.h"
+#include "Transform.h"
+#include "Camera.h"
+
 #include <DirectXMath.h>
 #include <wrl/client.h> // Used for ComPtr - a smart pointer for COM objects
+#include <vector>
+#include <memory>
 
 class Game 
 	: public DXCore
@@ -25,8 +32,6 @@ private:
 	// Should we use vsync to limit the frame rate?
 	bool vsync;
 	void CreateRootSigAndPipelineState();
-	HRESULT CreateStaticBuffer(unsigned int dataStride, unsigned int dataCount, void* data, ID3D12Resource**
-		buffer);
 	void CreateBasicGeometry();
 	//void LoadShaders(); <--Depricated from DX11
 	
@@ -36,18 +41,19 @@ private:
 	//    Component Object Model, which DirectX objects do
 	//  - More info here: https://github.com/Microsoft/DirectXTK/wiki/ComPtr
 
-	// Buffers to hold actual geometry data
-	Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuffer;
-	Microsoft::WRL::ComPtr<ID3D12Resource> indexBuffer;
+	//// Buffers to hold actual geometry data
+	//Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuffer;
+	//Microsoft::WRL::ComPtr<ID3D12Resource> indexBuffer;
 
-	D3D12_VERTEX_BUFFER_VIEW vbView;
-	D3D12_INDEX_BUFFER_VIEW ibView;
+	//D3D12_VERTEX_BUFFER_VIEW vbView;
+	//D3D12_INDEX_BUFFER_VIEW ibView;
 	
 	// Shaders and shader-related constructs now located in a PipelineState
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState;
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
 	
-	
-
+	// Scene
+	std::shared_ptr<Camera> camera;
+	std::vector<std::shared_ptr<Entity>> entities;
 };
 

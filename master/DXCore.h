@@ -69,8 +69,6 @@ protected:
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue>			commandQueue;
 	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>	commandList;
 
-	
-
 	//Buffers
 	static const int numBackBuffers = 2;
 	unsigned int currentSwapBuffer = 0;
@@ -87,12 +85,9 @@ protected:
 	D3D12_VIEWPORT viewport; //How much of the screen am I rendering into? X by Y pixels, can be whole thing, just a portion, etc.
 	D3D12_RECT scissorRect; //Occurs AFTER the pixel shader. Doesn't have to do anything, but must be defined. Allows removal of pixels in final product (UI).
 
-	Microsoft::WRL::ComPtr<ID3D12Fence> fence; //Division between work, tracks when tasks are completed on the GPU;
-	HANDLE fenceEvent;
-	unsigned long currentFence = 0; //Tracks which current fence we are at in the commandQueue.
-
-	void WaitForGPU();
-	void CloseExecuteAndResetCommandList();
+	//Microsoft::WRL::ComPtr<ID3D12Fence> fence; //Division between work, tracks when tasks are completed on the GPU;
+	//HANDLE fenceEvent;
+	//unsigned long currentFence = 0; //Tracks which current fence we are at in the commandQueue.
 
 	// Helper function for allocating a console window
 	void CreateConsoleWindow(int bufferLines, int bufferColumns, int windowLines, int windowColumns);

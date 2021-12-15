@@ -26,9 +26,7 @@ Game::Game(HINSTANCE hInstance)
 		1280,			   // Width of the window's client area
 		720,			   // Height of the window's client area
 		true),			   // Show extra stats (fps) in title bar?
-	vsync(false),
-	ibView{},
-	vbView{}
+	vsync(false)
 {
 #if defined(DEBUG) || defined(_DEBUG)
 	// Do we want a console window?  Probably only in debug mode
@@ -61,89 +59,7 @@ void Game::Init()
 	CreateBasicGeometry();
 	
 	//camera = std::make_shared<Camera>(0.0f, 0.0f, -5.0, 1.0f, XM_PIDIV4, width / (float)height);
-}
-
-HRESULT Game::CreateStaticBuffer(
-	unsigned int dataStride, unsigned int dataCount, void* data, ID3D12Resource** buffer)
-{
-	// Potential result
-	HRESULT hr = 0;
-
-	// We are making the final heap where the resource will live
-	D3D12_HEAP_PROPERTIES props = {};
-	props.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-	props.CreationNodeMask = 1;
-	props.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-	props.Type = D3D12_HEAP_TYPE_DEFAULT;
-	props.VisibleNodeMask = 1;
-
-	D3D12_RESOURCE_DESC desc = {};
-	desc.Alignment = 0;
-	desc.DepthOrArraySize = 1;
-	desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	desc.Flags = D3D12_RESOURCE_FLAG_NONE;
-	desc.Format = DXGI_FORMAT_UNKNOWN;
-	desc.Height = 1; // Assuming this is a regular buffer, not a texture
-	desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-	desc.MipLevels = 1;
-	desc.SampleDesc.Count = 1;
-	desc.SampleDesc.Quality = 0;
-	desc.Width = dataStride * dataCount; // Size of the buffer (Size of one vertex * numVertices) or (Size of one index * numIndices)
-
-	hr = device->CreateCommittedResource(
-		&props,
-		D3D12_HEAP_FLAG_NONE,
-		&desc,
-		D3D12_RESOURCE_STATE_COPY_DEST, // Will eventually be "common", but copying to it first!
-		0,
-		IID_PPV_ARGS(buffer));
-	if (FAILED(hr))
-		return hr;
-
-	// Now create an intermediate upload heap for copying initial data
-	D3D12_HEAP_PROPERTIES uploadProps = {};
-	uploadProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-	uploadProps.CreationNodeMask = 1;
-	uploadProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-	uploadProps.Type = D3D12_HEAP_TYPE_UPLOAD; // Can only ever be Generic_Read state
-	uploadProps.VisibleNodeMask = 1;
-
-	Microsoft::WRL::ComPtr<ID3D12Resource> uploadHeap;
-	hr = device->CreateCommittedResource(
-		&uploadProps,
-		D3D12_HEAP_FLAG_NONE,
-		&desc,
-		D3D12_RESOURCE_STATE_GENERIC_READ,
-		0,
-		IID_PPV_ARGS(uploadHeap.GetAddressOf()));
-	if (FAILED(hr))
-		return hr;
-
-	// Do a straight map/memcpy/unmap
-	void* gpuAddress = 0;
-	hr = uploadHeap->Map(0, 0, &gpuAddress);
-	if (FAILED(hr))
-		return hr;
-	memcpy(gpuAddress, data, dataStride * dataCount);
-	uploadHeap->Unmap(0, 0);
-
-	// Copy the whole buffer from uploadheap to vert buffer
-	commandList->CopyResource(*buffer, uploadHeap.Get());
-
-	// Transition the buffer to generic read for the rest of the app lifetime (presumable)
-	// Allows us to change how our resource is being used after it is set up and good to go. 
-	D3D12_RESOURCE_BARRIER rb = {};
-	rb.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	rb.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-	rb.Transition.pResource = *buffer;
-	rb.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-	rb.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
-	rb.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-	commandList->ResourceBarrier(1, &rb);
-
-	// Execute the command list and report success
-	CloseExecuteAndResetCommandList(); //Causes us to wait again.
-	return S_OK;
+	camera = std::make_shared<Camera>(0.0f, 0.0f, -5.0, width / (float)height);
 }
 
 // --------------------------------------------------------
@@ -166,7 +82,7 @@ void Game::CreateRootSigAndPipelineState()
 	}
 
 	// Input layout
-	const unsigned int inputElementCount = 2;
+	const unsigned int inputElementCount = 4;
 	D3D12_INPUT_ELEMENT_DESC inputElements[inputElementCount] = {};
 	{
 		// Create an input layout that describes the vertex format
@@ -178,20 +94,46 @@ void Game::CreateRootSigAndPipelineState()
 		inputElements[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;
 		inputElements[0].SemanticName = "POSITION";
 		inputElements[0].SemanticIndex = 0;
-		// Set up the second element - a color, which is 4 more float values
-		inputElements[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
-		inputElements[1].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-		inputElements[1].SemanticName = "COLOR";
+		// Set up the second element - a UV, which is 2 more float values
+		inputElements[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;	// After the previous element
+		inputElements[1].Format = DXGI_FORMAT_R32G32_FLOAT;			// 2x 32-bit floats
+		inputElements[1].SemanticName = "TEXCOORD";					// Match our vertex shader input!
 		inputElements[1].SemanticIndex = 0;
+		// Set up the third element - a normal, which is 3 more float values
+		inputElements[2].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;	// After the previous element
+		inputElements[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;		// 3x 32-bit floats
+		inputElements[2].SemanticName = "NORMAL";					// Match our vertex shader input!
+		inputElements[2].SemanticIndex = 0;							// This is the 0th normal (there could be more)
+
+		// Set up the fourth element - a tangent, which is 2 more float values
+		inputElements[3].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;	// After the previous element
+		inputElements[3].Format = DXGI_FORMAT_R32G32B32_FLOAT;		// 3x 32-bit floats
+		inputElements[3].SemanticName = "TANGENT";					// Match our vertex shader input!
+		inputElements[3].SemanticIndex = 0;
 	}
 
 	// Root Signature
 	{
+		// Create a table of CBV's (constant buffer views)
+		D3D12_DESCRIPTOR_RANGE cbvTable = {};
+		cbvTable.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+		cbvTable.NumDescriptors = 1;
+		cbvTable.BaseShaderRegister = 0;
+		cbvTable.RegisterSpace = 0;
+		cbvTable.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		// Create the root parameter
+		D3D12_ROOT_PARAMETER rootParam = {};
+		rootParam.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParam.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		rootParam.DescriptorTable.NumDescriptorRanges = 1;
+		rootParam.DescriptorTable.pDescriptorRanges = &cbvTable;
+
 		// Describe and serialize the root signature
 		D3D12_ROOT_SIGNATURE_DESC rootSig = {};
 		rootSig.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-		rootSig.NumParameters = 0;
-		rootSig.pParameters = 0;
+		rootSig.NumParameters = 1;
+		rootSig.pParameters = &rootParam;
 		rootSig.NumStaticSamplers = 0;
 		rootSig.pStaticSamplers = 0;
 
@@ -222,36 +164,45 @@ void Game::CreateRootSigAndPipelineState()
 	{
 		// Describe the pipeline state
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+
 		// -- Input assembler related ---
 		psoDesc.InputLayout.NumElements = inputElementCount;
 		psoDesc.InputLayout.pInputElementDescs = inputElements;
 		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+
 		// Root sig
 		psoDesc.pRootSignature = rootSignature.Get();
+
 		// -- Shaders (VS/PS) --- 
 		psoDesc.VS.pShaderBytecode = vertexShaderByteCode->GetBufferPointer();
 		psoDesc.VS.BytecodeLength = vertexShaderByteCode->GetBufferSize();
 		psoDesc.PS.pShaderBytecode = pixelShaderByteCode->GetBufferPointer();
 		psoDesc.PS.BytecodeLength = pixelShaderByteCode->GetBufferSize();
+
 		// -- Render targets ---
 		psoDesc.NumRenderTargets = 1;
 		psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
 		psoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 		psoDesc.SampleDesc.Count = 1;
 		psoDesc.SampleDesc.Quality = 0;
+
 		// -- States ---
 		psoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
 		psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
 		psoDesc.RasterizerState.DepthClipEnable = true;
+
 		psoDesc.DepthStencilState.DepthEnable = true;
 		psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
 		psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+
 		psoDesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
 		psoDesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ZERO;
 		psoDesc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
 		psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
 		// -- Misc ---
 		psoDesc.SampleMask = 0xffffffff;
+
 		// Create the pipe state object
 		device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(pipelineState.GetAddressOf()));
 	}
@@ -295,10 +246,12 @@ void Game::CreateBasicGeometry()
 	// - But just to see how it's done...
 	// unsigned int indices[] = { 0, 1, 2 };
 
-	std::shared_ptr<Mesh> cube = std::make_shared<Mesh>(GetFullPathTo("../../../../Assets/Models/cube.obj").c_str());
-
+	std::shared_ptr<Mesh> cube = std::make_shared<Mesh>(GetFullPathTo("../../Assets/Models/cube.obj").c_str());
+	std::shared_ptr<Entity> entity = std::make_shared<Entity>(cube);
+	entity.get()->GetTransform()->Scale(2, 2, 2);
+	entity.get()->GetTransform()->SetPosition(0, 0, 5);
+	entities.push_back(entity);
 }
-
 // --------------------------------------------------------
 // Handle resizing DirectX "stuff" to match the new window size.
 // For instance, updating our projection matrix's aspect ratio.
@@ -307,6 +260,12 @@ void Game::OnResize()
 {
 	// Handle base-level DX resize stuff
 	DXCore::OnResize();
+
+	//// Update the camera's projection to match the new size
+	//if (camera)
+	//{
+	//	camera->UpdateProjectionMatrix((float)width / height);
+	//}
 }
 
 // --------------------------------------------------------
@@ -317,6 +276,15 @@ void Game::Update(float deltaTime, float totalTime)
 	// Example input checking: Quit if the escape key is pressed
 	if (Input::GetInstance().KeyDown(VK_ESCAPE))
 		Quit();
+
+	// Spin entities
+	for (auto& e : entities)
+	{
+		e->GetTransform()->Rotate(0, deltaTime * 0.5f, 0);
+	}
+
+	// Other updates
+	camera->Update(deltaTime, hWnd);
 }
 
 // --------------------------------------------------------
@@ -355,24 +323,58 @@ void Game::Draw(float deltaTime, float totalTime)
 
 	// Rendering here!
 	{
+		// Grab the helper as we need it for a few things below
+		DX12Helper& dx12Helper = DX12Helper::GetInstance();
+
 		// Set overall pipeline state
 		commandList->SetPipelineState(pipelineState.Get());
 
 		// Root sig (must happen before root descriptor table)
 		commandList->SetGraphicsRootSignature(rootSignature.Get());
 
+		// Set constant buffer
+		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap = dx12Helper.GetConstantBufferDescriptorHeap();
+		commandList->SetDescriptorHeaps(1, descriptorHeap.GetAddressOf());
+
 		// Set up other commands for rendering
 		commandList->OMSetRenderTargets(1, &rtvHandles[currentSwapBuffer], true, &dsvHandle);
 		commandList->RSSetViewports(1, &viewport);
 		commandList->RSSetScissorRects(1, &scissorRect);
-		commandList->IASetVertexBuffers(0, 1, &vbView);
-		commandList->IASetIndexBuffer(&ibView);
 		commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		// Draw
-		commandList->DrawIndexedInstanced(3, 1, 0, 0, 0);
-	}
+		// Loop through the entities
+		for (auto& e : entities)
+		{
+			// Set up the data we intend to use for drawing this entity
+			VertexShaderExternalData vsData = {};
+			vsData.world = e->GetTransform()->GetWorldMatrix();
+			vsData.view = camera->GetViewMatrix();
+			vsData.projection = camera->GetProjectionMatrix();
 
+			// Send this to a chunk of the constant buffer heap
+			// and grab the GPU handle for it so we can set it for this draw
+			D3D12_GPU_DESCRIPTOR_HANDLE cbHandle = dx12Helper.FillNextConstantBufferAndGetGPUDescriptorHandle(
+				(void*)(&vsData), sizeof(VertexShaderExternalData));
+
+			// Set this constant buffer handle
+			// Note: This assumes that descriptor table 0 is the
+			//       place to put this particular descriptor.  This
+			//       is based on how we set up our root signature.
+			commandList->SetGraphicsRootDescriptorTable(0, cbHandle);
+
+			// Grab the mesh and its buffer views
+			std::shared_ptr<Mesh> mesh = e->GetMesh();
+			D3D12_VERTEX_BUFFER_VIEW vbv = mesh->GetVB();
+			D3D12_INDEX_BUFFER_VIEW  ibv = mesh->GetIB();
+
+			// Set the geometry
+			commandList->IASetVertexBuffers(0, 1, &vbv);
+			commandList->IASetIndexBuffer(&ibv);
+
+			// Draw
+			commandList->DrawIndexedInstanced(mesh->GetIndexCount(), 1, 0, 0, 0);
+		}
+	}
 	// Present
 	{
 		// Transition back to present
@@ -386,7 +388,8 @@ void Game::Draw(float deltaTime, float totalTime)
 		commandList->ResourceBarrier(1, &rb);
 
 		// Must occur BEFORE present
-		CloseExecuteAndResetCommandList();
+
+		DX12Helper::GetInstance().CloseExecuteAndResetCommandList();
 
 		// Present the current back buffer
 		swapChain->Present(vsync ? 1 : 0, 0); //Vsync on or off? Simple computation

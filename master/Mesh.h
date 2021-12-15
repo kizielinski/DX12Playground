@@ -23,7 +23,7 @@ private:
 	D3D12_INDEX_BUFFER_VIEW ibView;
 	Microsoft::WRL::ComPtr<ID3D12Resource> indexBuffer;
 
-	void CalculateTangents(Vertex* vertices, int numVertices, unsigned int* indices, int numIndices);
+	void CalculateTangents(Vertex* vertexArray, int numVertices, unsigned int* indexArray, int numIndices);
 	void CreateBuffers(Vertex* vertexArray, int numVertices, unsigned int* indexArray, int numIndices);
 };
 
