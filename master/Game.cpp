@@ -1,6 +1,8 @@
 #include "Game.h"
 #include "Vertex.h"
 #include "Input.h"
+#include "BufferStructs.h"
+#include "DX12Helper.h"
 
 // Needed for a helper function to read compiled shader files from the hard drive
 #pragma comment(lib, "d3dcompiler.lib")
@@ -43,7 +45,7 @@ Game::Game(HINSTANCE hInstance)
 Game::~Game()
 {
 	//Need to wait until GPU is done with its work otherwise we will get errors
-	WaitForGPU();
+	DX12Helper::GetInstance().WaitForGPU();
 }
 
 // --------------------------------------------------------
@@ -58,6 +60,7 @@ void Game::Init()
 	CreateRootSigAndPipelineState();
 	CreateBasicGeometry();
 	
+	//camera = std::make_shared<Camera>(0.0f, 0.0f, -5.0, 1.0f, XM_PIDIV4, width / (float)height);
 }
 
 HRESULT Game::CreateStaticBuffer(
@@ -262,9 +265,9 @@ void Game::CreateBasicGeometry()
 {
 	// Create some temporary variables to represent colors
 	// - Not necessary, just makes things more readable
-	XMFLOAT4 red = XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f);
+	/*XMFLOAT4 red = XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f);
 	XMFLOAT4 green = XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f);
-	XMFLOAT4 blue = XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f);
+	XMFLOAT4 blue = XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f);*/
 
 	// Set up the vertices of the triangle we would like to draw
 	// - We're going to copy this array, exactly as it exists in memory
@@ -278,35 +281,23 @@ void Game::CreateBasicGeometry()
 	//    knowing the exact size (in pixels) of the image/window/etc.  
 	// - Long story short: Resizing the window also resizes the triangle,
 	//    since we're describing the triangle in terms of the window itself
-	Vertex vertices[] =
-	{
-		{ XMFLOAT3(+0.0f, +0.5f, +0.0f), red },
-		{ XMFLOAT3(+0.5f, -0.5f, +0.0f), blue },
-		{ XMFLOAT3(-0.5f, -0.5f, +0.0f), green },
-	};
+	//Vertex vertices[] =
+	//{
+	//	{ XMFLOAT3(+0.0f, +0.5f, +0.0f), red },
+	//	{ XMFLOAT3(+0.5f, -0.5f, +0.0f), blue },
+	//	{ XMFLOAT3(-0.5f, -0.5f, +0.0f), green },
+	//};
 
 	// Set up the indices, which tell us which vertices to use and in which order
 	// - This is somewhat redundant for just 3 vertices (it's a simple example)
 	// - Indices are technically not required if the vertices are in the buffer 
 	//    in the correct order and each one will be used exactly once
 	// - But just to see how it's done...
-	unsigned int indices[] = { 0, 1, 2 };
+	// unsigned int indices[] = { 0, 1, 2 };
 
-	//Create two buffers
-	// Create the two buffers
-	CreateStaticBuffer(sizeof(Vertex), ARRAYSIZE(vertices), vertices, vertexBuffer.GetAddressOf());
-	CreateStaticBuffer(sizeof(unsigned int), ARRAYSIZE(indices), indices, indexBuffer.GetAddressOf());
+	std::shared_ptr<Mesh> cube = std::make_shared<Mesh>(GetFullPathTo("../../../../Assets/Models/cube.obj").c_str());
 
-	// Set up the views
-	vbView.StrideInBytes = sizeof(Vertex);
-	vbView.SizeInBytes = sizeof(Vertex) * ARRAYSIZE(vertices);
-	vbView.BufferLocation = vertexBuffer->GetGPUVirtualAddress(); //GPU address only, meaningless in C++
-
-	ibView.Format = DXGI_FORMAT_R32_UINT;
-	ibView.SizeInBytes = sizeof(unsigned int) * ARRAYSIZE(indices);
-	ibView.BufferLocation = indexBuffer->GetGPUVirtualAddress();
 }
-
 
 // --------------------------------------------------------
 // Handle resizing DirectX "stuff" to match the new window size.

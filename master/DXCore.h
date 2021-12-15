@@ -64,23 +64,12 @@ protected:
 	D3D_FEATURE_LEVEL		dxFeatureLevel;
 	Microsoft::WRL::ComPtr<ID3D12Device> device;
 	Microsoft::WRL::ComPtr<IDXGISwapChain> swapChain; ///<---Doesn't handle buffers for us anymore and we have to TRACK them
-	/*Microsoft::WRL::ComPtr<ID3D11Device>		device;
-	Microsoft::WRL::ComPtr<ID3D11DeviceContext>	context;
+	
+	Microsoft::WRL::ComPtr<ID3D12CommandAllocator>		commandAllocator;
+	Microsoft::WRL::ComPtr<ID3D12CommandQueue>			commandQueue;
+	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>	commandList;
 
-	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> backBufferRTV;
-	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depthStencilView;*/ //Depricated in DX12
-
-	//Shares functions that dx11 context did, used for:
-	//Draw, Changing Vertex/Index buffers, change other pieces of pipeline
-	//Not immediate, just a list of commands that will be sent to GPU
-	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commandList; 
-
-	//Need memory for commands that will be sent to GPU
-	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> commandAllocator;
-
-	//Will execute the set(s) of commands from commandLists, 
-	//and set them to be executed on the GPU
-	Microsoft::WRL::ComPtr<ID3D12CommandQueue> commandQueue;
+	
 
 	//Buffers
 	static const int numBackBuffers = 2;
