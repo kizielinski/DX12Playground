@@ -29,6 +29,11 @@ void DX12Helper::Initialize(Microsoft::WRL::ComPtr<ID3D12Device> device, Microso
 	CreateCBVSRVDescriptorHeap();
 }
 
+Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> DX12Helper::GetCBVSRVDescriptorHeap()
+{
+	return cbvSrvDescriptorHeap;
+}
+
 //Load a texture using DirectX12 toolkit and makes 
 //non-shader visible descriptor heap with it's own 
 //handle (returned to material) so it can be copied over later.

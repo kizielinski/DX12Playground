@@ -296,7 +296,7 @@ void Game::CreateBasicGeometry()
 
 	//Load Texture(s)
 	D3D12_CPU_DESCRIPTOR_HANDLE bronzeAlbedo = LoadTexture(L"../../Assets/Textures/bronze_albedo.png");
-	D3D12_CPU_DESCRIPTOR_HANDLE bronzeNormal = LoadTexture(L"../../Assets/Textures/bronze_normals.png");
+	D3D12_CPU_DESCRIPTOR_HANDLE bronzeNormal = LoadTexture(L"../../Assets/Textures/bronze_albedo.png");
 	D3D12_CPU_DESCRIPTOR_HANDLE bronzeRoughness = LoadTexture(L"../../Assets/Textures/bronze_roughness.png");
 	D3D12_CPU_DESCRIPTOR_HANDLE bronzeMetal = LoadTexture(L"../../Assets/Textures/bronze_metal.png");
 
@@ -378,7 +378,7 @@ void Game::Update(float deltaTime, float totalTime)
 	// Spin entities
 	for (auto& e : entities)
 	{
-		e->GetTransform()->Rotate(0, deltaTime * 0.5f, 0);
+		//e->GetTransform()->Rotate(0, deltaTime * 0.5f, 0);
 	}
 
 	// Other updates
@@ -431,7 +431,7 @@ void Game::Draw(float deltaTime, float totalTime)
 		commandList->SetGraphicsRootSignature(rootSignature.Get());
 
 		// Set constant buffer
-		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap = dx12Helper.GetConstantBufferDescriptorHeap();
+		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap = dx12Helper.GetCBVSRVDescriptorHeap();
 		commandList->SetDescriptorHeaps(1, descriptorHeap.GetAddressOf());
 
 		// Set up other commands for rendering
@@ -440,20 +440,16 @@ void Game::Draw(float deltaTime, float totalTime)
 		commandList->RSSetScissorRects(1, &scissorRect);
 		commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		// Loop through the entities
 		for (auto& e : entities)
 		{
-			//Grab material 
-			//(should we consider sorting entities by marterial 
-			//and then drawing groups of entities by material?)
+			// Grab the material for this entity
 			std::shared_ptr<Material> mat = e->GetMaterial();
 
-			//Setup pipeline
+			// Set the pipeline state for this material
 			commandList->SetPipelineState(mat->GetPipelineState().Get());
 
-			//Setup Vertexshader
+			// Set up the vertex shader data we intend to use for drawing this entity
 			{
-				// Set up the data we intend to use for drawing this entity
 				VertexShaderExternalData vsData = {};
 				vsData.world = e->GetTransform()->GetWorldMatrix();
 				vsData.worldInverseTranspose = e->GetTransform()->GetWorldITMatrix();
@@ -462,38 +458,39 @@ void Game::Draw(float deltaTime, float totalTime)
 
 				// Send this to a chunk of the constant buffer heap
 				// and grab the GPU handle for it so we can set it for this draw
-				D3D12_GPU_DESCRIPTOR_HANDLE cbHandle = dx12Helper.FillNextConstantBufferAndGetGPUDescriptorHandle(
+				D3D12_GPU_DESCRIPTOR_HANDLE cbHandleVS = dx12Helper.FillNextConstantBufferAndGetGPUDescriptorHandle(
 					(void*)(&vsData), sizeof(VertexShaderExternalData));
 
 				// Set this constant buffer handle
 				// Note: This assumes that descriptor table 0 is the
 				//       place to put this particular descriptor.  This
 				//       is based on how we set up our root signature.
-				commandList->SetGraphicsRootDescriptorTable(0, cbHandle);
+				commandList->SetGraphicsRootDescriptorTable(0, cbHandleVS);
 			}
-			
-			//Now Pixelshader and cbuffer
+
+			// Pixel shader data and cbuffer setup
 			{
 				PixelShaderExternalData psData = {};
 				psData.uvScale = mat->GetUVScale();
 				psData.uvOffset = mat->GetUVOffset();
 				psData.cameraPosition = camera->GetPosition();
-				psData.lightCount = lightCount;
+				psData.lightCount =  8;//lightCount;
 				memcpy(psData.lights, &lights[0], sizeof(Light) * MAX_LIGHTS);
 
-				//Now send it to cbuffer memory (heap) and grab its handle
+				// Send this to a chunk of the constant buffer heap
+				// and grab the GPU handle for it so we can set it for this draw
 				D3D12_GPU_DESCRIPTOR_HANDLE cbHandlePS = dx12Helper.FillNextConstantBufferAndGetGPUDescriptorHandle(
 					(void*)(&psData), sizeof(PixelShaderExternalData));
 
-				//Set constant buffer handle
-				//Assumes, based on our current root signature setup (the Textures/Materials exercise)
-				//that descriptor table 1 is where this cbuffer goes, this value could change based on our setup.
-				commandList->SetGraphicsRootDescriptorTable(2, mat->GetFinalGPUHandleForTextures());
+				// Set this constant buffer handle
+				// Note: This assumes that descriptor table 1 is the
+				//       place to put this particular descriptor.  This
+				//       is based on how we set up our root signature.
+				commandList->SetGraphicsRootDescriptorTable(1, cbHandlePS);
 			}
 
-			//Set descriptor handle for this material's textures
-			//Same thing as the constant buffer handle directly above.
-			//This setup is based on our current implementation of rootSig
+			// Set the SRV descriptor handle for this material's textures
+			// Note: This assumes that descriptor table 2 is for textures (as per our root sig)
 			commandList->SetGraphicsRootDescriptorTable(2, mat->GetFinalGPUHandleForTextures());
 
 			// Grab the mesh and its buffer views
