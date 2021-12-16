@@ -5,7 +5,7 @@
 #include "Entity.h"
 #include "Transform.h"
 #include "Camera.h"
-//#include "Lights.h"
+#include "Lights.h"
 
 #include <DirectXMath.h>
 #include <wrl/client.h> // Used for ComPtr - a smart pointer for COM objects
@@ -34,7 +34,7 @@ private:
 	bool vsync;
 	void CreateRootSigAndPipelineState();
 	void CreateBasicGeometry();
-	//void Generate Lights();
+	void GenerateLights();
 	//void LoadShaders(); <--Depricated from DX11
 	
 
@@ -55,8 +55,8 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
 	
 	// Scene
-	// int lightCount
-	// std::vector<Lights> lights;
+	int lightCount;
+	std::vector<Light> lights;
 	std::shared_ptr<Camera> camera;
 	std::vector<std::shared_ptr<Entity>> entities;
 };

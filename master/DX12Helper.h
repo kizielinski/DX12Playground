@@ -3,6 +3,7 @@
 #include <d3d12.h>
 #include <DirectXMath.h>
 #include <wrl/client.h>
+#include <vector>
 
 class DX12Helper
 {

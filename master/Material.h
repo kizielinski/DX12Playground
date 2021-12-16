@@ -16,8 +16,8 @@ public:
 
 	Material(Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState,
 		DirectX::XMFLOAT3 tint,
-		DirectX::XMFLOAT2 uvScale,
-		DirectX::XMFLOAT2 uvOffset);
+		DirectX::XMFLOAT2 uvScale = DirectX::XMFLOAT2(1, 1),
+		DirectX::XMFLOAT2 uvOffset = DirectX::XMFLOAT2(0, 0));
 	~Material();
 
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> GetPipelineState();

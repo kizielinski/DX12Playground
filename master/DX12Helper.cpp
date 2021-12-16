@@ -39,7 +39,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE DX12Helper::LoadTexture(const wchar_t* file, bool ge
 	ResourceUploadBatch upload(device.Get());
 	upload.Begin();
 
-	//Attempt to create Texture
+	// Attempt to create the texture
 	Microsoft::WRL::ComPtr<ID3D12Resource> texture;
 	CreateWICTextureFromFile(device.Get(), upload, file, texture.GetAddressOf(), generateMips);
 
@@ -209,6 +209,24 @@ D3D12_GPU_DESCRIPTOR_HANDLE DX12Helper::FillNextConstantBufferAndGetGPUDescripto
 
 		return gpuHandle; 
 	}
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE DX12Helper::CopySRVsToDescriptorHeapAndGetGPUDescriptorHandle(D3D12_CPU_DESCRIPTOR_HANDLE firstDescriptorToCopy, unsigned int numDescriptorsToCopy)
+{
+	// Grab the actual heap start on both sides and offset to the next open SRV portion
+	D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = cbvSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+	D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = cbvSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+
+	cpuHandle.ptr += (SIZE_T)srvDescriptorOffset * cbvSrvDescriptorHeapIncrementSize;
+	gpuHandle.ptr += (SIZE_T)srvDescriptorOffset * cbvSrvDescriptorHeapIncrementSize;
+
+	// We know where to copy these descriptors, so copy all of them and remember the new offset
+	device->CopyDescriptorsSimple(numDescriptorsToCopy, cpuHandle, firstDescriptorToCopy, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	srvDescriptorOffset += numDescriptorsToCopy;
+
+	// Pass back the GPU handle to the start of this section
+	// in the final CBV/SRV heap so the caller can use it later
+	return gpuHandle;
 }
 
 void DX12Helper::CloseExecuteAndResetCommandList()

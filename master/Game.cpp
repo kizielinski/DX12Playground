@@ -15,7 +15,7 @@
 // For the DirectX Math library
 using namespace DirectX;
 
-#define RandomRange(min, max) (float)rand() / RAND_MAX * max - min + min;
+#define RandomRange(min, max) (float)rand() / RAND_MAX * max - min + min
 
 // --------------------------------------------------------
 // Constructor
@@ -66,7 +66,7 @@ void Game::Init()
 	//  - You'll be expanding and/or replacing these later
 	CreateRootSigAndPipelineState();
 	CreateBasicGeometry();
-	//GenerateLights();
+	GenerateLights();
 	
 	//camera = std::make_shared<Camera>(0.0f, 0.0f, -5.0, 1.0f, XM_PIDIV4, width / (float)height);
 	camera = std::make_shared<Camera>(0.0f, 0.0f, -5.0, width / (float)height);
@@ -192,9 +192,6 @@ void Game::CreateRootSigAndPipelineState()
 		//rootSig.NumStaticSamplers = 0;
 		//rootSig.pStaticSamplers = 0;
 
-		ID3DBlob* serializedRootSig = 0;
-		ID3DBlob* errors = 0;
-
 		//Create static sampler, only works for this exercise
 		//Eventually materials will have their own samplers.
 		D3D12_STATIC_SAMPLER_DESC anisoWrap = {};
@@ -298,10 +295,10 @@ void Game::CreateBasicGeometry()
 #define LoadTexture(x) DX12Helper::GetInstance().LoadTexture(GetFullPathTo_Wide(x).c_str())
 
 	//Load Texture(s)
-	D3D12_CPU_DESCRIPTOR_HANDLE bronzeAlbedo = LoadTexture(L"../../../../Assets/Textures/bronze_albedo.png");
-	D3D12_CPU_DESCRIPTOR_HANDLE bronzeNormal = LoadTexture(L"../../../../Assets/Textures/bronze_normals.png");
-	D3D12_CPU_DESCRIPTOR_HANDLE bronzeRoughness = LoadTexture(L"../../../../Assets/Textures/bronze_roughness.png");
-	D3D12_CPU_DESCRIPTOR_HANDLE bronzeMetal = LoadTexture(L"../../../../Assets/Textures/bronze_metal.png");
+	D3D12_CPU_DESCRIPTOR_HANDLE bronzeAlbedo = LoadTexture(L"../../Assets/Textures/bronze_albedo.png");
+	D3D12_CPU_DESCRIPTOR_HANDLE bronzeNormal = LoadTexture(L"../../Assets/Textures/bronze_normals.png");
+	D3D12_CPU_DESCRIPTOR_HANDLE bronzeRoughness = LoadTexture(L"../../Assets/Textures/bronze_roughness.png");
+	D3D12_CPU_DESCRIPTOR_HANDLE bronzeMetal = LoadTexture(L"../../Assets/Textures/bronze_metal.png");
 
 	//Create material(s)
 	//Samplers are a single static one in root sampler
@@ -319,6 +316,40 @@ void Game::CreateBasicGeometry()
 	entity.get()->GetTransform()->SetPosition(0, 0, 5);
 	entities.push_back(entity);
 }
+
+void Game::GenerateLights()
+{
+	// Reset
+	lights.clear();
+
+	// Setup directional lights
+	Light dir1 = {};
+	dir1.Type = LIGHT_TYPE_DIRECTIONAL;
+	dir1.Direction = XMFLOAT3(1, -1, 1);
+	dir1.Color = XMFLOAT3(0.8f, 0.8f, 0.8f);
+	dir1.Intensity = 1.0f;
+
+	// Add light to the list
+	lights.push_back(dir1);
+
+	// Create the rest of the lights
+	while (lights.size() < MAX_LIGHTS)
+	{
+		Light point = {};
+		point.Type = LIGHT_TYPE_POINT;
+		point.Position = XMFLOAT3(RandomRange(-15.0f, 15.0f), RandomRange(-2.0f, 5.0f), RandomRange(-15.0f, 15.0f));
+		point.Color = XMFLOAT3(RandomRange(0, 1), RandomRange(0, 1), RandomRange(0, 1));
+		point.Range = RandomRange(5.0f, 10.0f);
+		point.Intensity = RandomRange(0.1f, 3.0f);
+
+		// Add to the list
+		lights.push_back(point);
+	}
+
+	// Make sure we're exactly MAX_LIGHTS big
+	lights.resize(MAX_LIGHTS);
+}
+
 // --------------------------------------------------------
 // Handle resizing DirectX "stuff" to match the new window size.
 // For instance, updating our projection matrix's aspect ratio.
@@ -392,8 +423,6 @@ void Game::Draw(float deltaTime, float totalTime)
 
 	// Rendering here!
 	{
-		// Grab the helper as we need it for a few things below
-		DX12Helper& dx12Helper = DX12Helper::GetInstance();
 
 		// Set overall pipeline state
 		//commandList->SetPipelineState(pipelineState.Get());
@@ -494,7 +523,7 @@ void Game::Draw(float deltaTime, float totalTime)
 
 		// Must occur BEFORE present
 
-		DX12Helper::GetInstance().CloseExecuteAndResetCommandList();
+		dx12Helper.CloseExecuteAndResetCommandList();
 
 		// Present the current back buffer
 		swapChain->Present(vsync ? 1 : 0, 0); //Vsync on or off? Simple computation

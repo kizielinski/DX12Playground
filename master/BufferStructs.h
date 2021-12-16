@@ -19,5 +19,5 @@ struct PixelShaderExternalData
 	DirectX::XMFLOAT2 uvOffset;
 	DirectX::XMFLOAT3 cameraPosition;
 	int lightCount;
-	Light lights[MAX_LIGHTS]
+	Light lights[MAX_LIGHTS];
 };
