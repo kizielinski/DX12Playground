@@ -296,7 +296,7 @@ void Game::CreateBasicGeometry()
 
 	//Load Texture(s)
 	D3D12_CPU_DESCRIPTOR_HANDLE bronzeAlbedo = LoadTexture(L"../../Assets/Textures/bronze_albedo.png");
-	D3D12_CPU_DESCRIPTOR_HANDLE bronzeNormal = LoadTexture(L"../../Assets/Textures/bronze_albedo.png");
+	D3D12_CPU_DESCRIPTOR_HANDLE bronzeNormal = LoadTexture(L"../../Assets/Textures/bronze_normals.png");
 	D3D12_CPU_DESCRIPTOR_HANDLE bronzeRoughness = LoadTexture(L"../../Assets/Textures/bronze_roughness.png");
 	D3D12_CPU_DESCRIPTOR_HANDLE bronzeMetal = LoadTexture(L"../../Assets/Textures/bronze_metal.png");
 
