@@ -12,7 +12,7 @@
 //	currentGraphicDef = graphicData;
 //}
 
-Entity::Entity(std::shared_ptr<Mesh> newMesh) : mesh(newMesh)
+Entity::Entity(std::shared_ptr<Mesh> newMesh, std::shared_ptr<Material> newMaterial) : mesh(newMesh), material(newMaterial)
 {
 }
 
@@ -23,6 +23,21 @@ Entity::~Entity()
 std::shared_ptr<Mesh> Entity::GetMesh()
 {
 	return mesh;
+}
+
+std::shared_ptr<Material> Entity::GetMaterial()
+{
+	return material;
+}
+
+void Entity::AssignMaterial(std::shared_ptr<Material> newMaterial)
+{
+	material = newMaterial;
+}
+
+void Entity::AssignMesh(std::shared_ptr<Mesh> newMesh)
+{
+	mesh = newMesh;
 }
 
 //void Entity::DrawEntity(Microsoft::WRL::ComPtr<ID3D11DeviceContext> context, Camera* cam)

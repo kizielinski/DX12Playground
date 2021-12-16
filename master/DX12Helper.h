@@ -26,13 +26,12 @@ public:
 private:
 	static DX12Helper* instance;
 	DX12Helper() :
-		cbUploadHeap(0),
 		cbUploadHeapOffsetInBytes(0),
 		cbUploadHeapSizeInBytes(0),
 		cbUploadHeapStartAddress(0),
-		cbvDescriptorHeap(0),
-		cbvDescriptorHeapIncrementSize(0),
 		cbvDescriptorOffset(0),
+		cbvSrvDescriptorHeapIncrementSize(0),
+		srvDescriptorOffset(0),
 		waitFenceCounter(0),
 		waitFenceEvent(0),
 		waitFence(0)
@@ -50,14 +49,25 @@ public:
 		Microsoft::WRL::ComPtr<ID3D12CommandAllocator> commandAllocator
 	);
 
+	//Getter for CBV/SRV descriptor heap
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> GetCBVSRVDescriptorHeap();
+
 	//Function for general static buffer (aka resource creation)
 	Microsoft::WRL::ComPtr<ID3D12Resource> CreateStaticBuffer(unsigned int dataStride, unsigned int dataCount, void* data);
+
+	//More resource creation, load textures
+	D3D12_CPU_DESCRIPTOR_HANDLE LoadTexture(const wchar_t* file, bool generateMips = true);
 
 	//Create fields for dynamic resources
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> GetConstantBufferDescriptorHeap();
 	D3D12_GPU_DESCRIPTOR_HANDLE FillNextConstantBufferAndGetGPUDescriptorHandle(
 		void* data,
 		unsigned int dataSizeInBytes);
+
+	D3D12_GPU_DESCRIPTOR_HANDLE CopySRVsToDescriptorHeapAndGetGPUDescriptorHandle(
+		D3D12_CPU_DESCRIPTOR_HANDLE firstDescriptorToCopy, unsigned int numDescriptorsToCopy
+	);
+
 
 	// Command list & synchronization
 	void CloseExecuteAndResetCommandList();
@@ -103,11 +113,15 @@ private:
 	void* cbUploadHeapStartAddress;
 
 	//GPU-side CBV/SRV descriptor heap
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> cbvDescriptorHeap;
-	SIZE_T cbvDescriptorHeapIncrementSize;
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> cbvSrvDescriptorHeap;
+	SIZE_T cbvSrvDescriptorHeapIncrementSize;
 	unsigned int cbvDescriptorOffset;
+	unsigned int srvDescriptorOffset;
 
 	void CreateConstantBufferUploadHeap();
-	void CreateConstantBufferViewDescriptorHeap();
-};
+	void CreateCBVSRVDescriptorHeap();
 
+	//Texture fields
+	std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> textures;
+	std::vector<Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>> cpuSideTextureDescriptorHeaps;
+};

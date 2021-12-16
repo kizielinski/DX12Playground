@@ -1,5 +1,10 @@
 #include "DX12Helper.h"
 
+#include "WICTextureLoader.h"
+#include "ResourceUploadBatch.h"
+
+using namespace DirectX;
+
 //Singleton requirement
 DX12Helper* DX12Helper::instance;
 
@@ -21,8 +26,52 @@ void DX12Helper::Initialize(Microsoft::WRL::ComPtr<ID3D12Device> device, Microso
 
 	// Create the constant buffer upload heap
 	CreateConstantBufferUploadHeap();
-	CreateConstantBufferViewDescriptorHeap();
+	CreateCBVSRVDescriptorHeap();
 }
+
+//Load a texture using DirectX12 toolkit and makes 
+//non-shader visible descriptor heap with it's own 
+//handle (returned to material) so it can be copied over later.
+
+D3D12_CPU_DESCRIPTOR_HANDLE DX12Helper::LoadTexture(const wchar_t* file, bool generateMips)
+{
+	//Helper function from toolkit that uploads a resource to appropriate GPU memory
+	ResourceUploadBatch upload(device.Get());
+	upload.Begin();
+
+	//Attempt to create Texture
+	Microsoft::WRL::ComPtr<ID3D12Resource> texture;
+	CreateWICTextureFromFile(device.Get(), upload, file, texture.GetAddressOf(), generateMips);
+
+	//Make sure upload is finished before we return texture.
+	auto finish = upload.End(commandQueue.Get());
+	finish.wait();
+
+	//Add texture to our list and then make a CPU-side descriptor heap for this texture's SRV
+	//Possible Improvement: Find a way to reallocate all descriptors into the same heap after all SRVs are loaded.
+	textures.push_back(texture);
+
+	//Descriptor heap definition (CPU-SIDE)
+	D3D12_DESCRIPTOR_HEAP_DESC dhDesc = {};
+	dhDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE; //Non-shader visible for CPU-side-only descriptor heap (useful where?)
+	dhDesc.NodeMask = 0;
+	dhDesc.NumDescriptors = 1;
+	dhDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descHeap;
+	device->CreateDescriptorHeap(&dhDesc, IID_PPV_ARGS(descHeap.GetAddressOf()));
+	cpuSideTextureDescriptorHeaps.push_back(descHeap);
+
+	// Create the SRV on this descriptor heap
+	// Note: Using a null description results in the "default" SRV (same format, all mips, all array slices, etc.)
+	D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = descHeap->GetCPUDescriptorHandleForHeapStart();
+	device->CreateShaderResourceView(texture.Get(), 0, cpuHandle);
+
+	// Return the CPU descriptor handle, which can be used to
+	// copy the descriptor to a shader-visible heap later
+	return cpuHandle;
+}
+
 
 Microsoft::WRL::ComPtr<ID3D12Resource> DX12Helper::CreateStaticBuffer(unsigned int dataStride, unsigned int dataCount, void* data)
 {
@@ -103,9 +152,15 @@ Microsoft::WRL::ComPtr<ID3D12Resource> DX12Helper::CreateStaticBuffer(unsigned i
 //Return CBV heap for drawing.
 Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> DX12Helper::GetConstantBufferDescriptorHeap()
 {
-	return cbvDescriptorHeap;
+	return cbvSrvDescriptorHeap;
 }
 
+//Copies data into CBV upload heap.
+//Prioritizes next unused spot and then will wrap (ring buffer).
+//Returns GPU descriptor handle when this operation is finished
+//
+// data - The current data to copy to the GPU
+// dataSizeInBytes - The byte size of the data to copy
 D3D12_GPU_DESCRIPTOR_HANDLE DX12Helper::FillNextConstantBufferAndGetGPUDescriptorHandle(void* data, unsigned int dataSizeInBytes)
 {
 	D3D12_GPU_VIRTUAL_ADDRESS virtualGPUAddress = cbUploadHeap->GetGPUVirtualAddress() + cbUploadHeapOffsetInBytes;
@@ -116,15 +171,19 @@ D3D12_GPU_DESCRIPTOR_HANDLE DX12Helper::FillNextConstantBufferAndGetGPUDescripto
 	reservationSize = (reservationSize + 255); //Adds 255 to drop the last few bits
 	reservationSize = (reservationSize & ~255); //Flip it so it can be used to mask
 
+	if(cbUploadHeapOffsetInBytes + reservationSize>= cbUploadHeapSizeInBytes)
+	{ cbUploadHeapOffsetInBytes = 0; }
+
 	// === Copy data to the upload heap ===
 	{
 		//Calculate address we mapped to buffer (actual upload address)
 		//Different from virtual address for the GPU
 		void* uploadAddress = reinterpret_cast<void*>((SIZE_T)cbUploadHeapStartAddress + cbUploadHeapOffsetInBytes);
 
-		//
+		//New data put into this part of the heap
 		memcpy(uploadAddress, data, dataSizeInBytes);
 
+		//Use offset and treat upload heap like a ring buffer.
 		cbUploadHeapOffsetInBytes += reservationSize;
 		if (cbUploadHeapOffsetInBytes >= cbUploadHeapSizeInBytes)
 			cbUploadHeapOffsetInBytes = 0;
@@ -132,11 +191,11 @@ D3D12_GPU_DESCRIPTOR_HANDLE DX12Helper::FillNextConstantBufferAndGetGPUDescripto
 
 	// Create a CBV for this section of the heap
 	{
-		D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = cbvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-		D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = cbvDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+		D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = cbvSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+		D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = cbvSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
 
-		cpuHandle.ptr += (SIZE_T)cbvDescriptorOffset * cbvDescriptorHeapIncrementSize;
-		gpuHandle.ptr += (SIZE_T)cbvDescriptorOffset * cbvDescriptorHeapIncrementSize;
+		cpuHandle.ptr += (SIZE_T)cbvDescriptorOffset * cbvSrvDescriptorHeapIncrementSize;
+		gpuHandle.ptr += (SIZE_T)cbvDescriptorOffset * cbvSrvDescriptorHeapIncrementSize;
 	
 		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
 		cbvDesc.BufferLocation = virtualGPUAddress;
@@ -236,15 +295,11 @@ void DX12Helper::CreateConstantBufferUploadHeap()
 
 //Create a single CBV descriptor heap which holds all 
 //CBVs for the entire program and allows re-use of memory.
-void DX12Helper::CreateConstantBufferViewDescriptorHeap()
+void DX12Helper::CreateCBVSRVDescriptorHeap()
 {
 	// Ask the device for the increment size for CBV descriptor heaps
 	// This can vary by GPU so we need to query for it
-	cbvDescriptorHeapIncrementSize = (SIZE_T)device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-	// Assume the first CBV will be at the beginning of the heap
-	// This will increase as we use more CBVs and will wrap back to 0
-	cbvDescriptorOffset = 0;
+	cbvSrvDescriptorHeapIncrementSize = (SIZE_T)device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 	// Describe the descriptor heap we want to make
 	D3D12_DESCRIPTOR_HEAP_DESC dhDesc = {};
@@ -252,5 +307,10 @@ void DX12Helper::CreateConstantBufferViewDescriptorHeap()
 	dhDesc.NodeMask = 0; // Node here means physical GPU - we only have 1 so its index is 0
 	dhDesc.NumDescriptors = maxConstantBuffers; // How many descriptors will we need?
 	dhDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; // This heap can store CBVs, SRVs and UAVs
-	device->CreateDescriptorHeap(&dhDesc, IID_PPV_ARGS(cbvDescriptorHeap.GetAddressOf()));
+	device->CreateDescriptorHeap(&dhDesc, IID_PPV_ARGS(cbvSrvDescriptorHeap.GetAddressOf()));
+
+	// Assume the first CBV will be at the beginning of the heap
+	// This will increase as we use more CBVs and will wrap back to 0
+	cbvDescriptorOffset = 0;
+
 }
