@@ -80,6 +80,6 @@ float4 main(VertexToPixel input) : SV_TARGET
 
 	// Gamma correct and return
 	//return float4(pow(totalLight, 1.0f / 2.2f), 1.0f);
-	//return float4(255, 0, 0, 255);
-	return float4(input.normal, 1);
+	return float4(255, 0, 0, 255);
+	//return float4(input.normal, 1);
 }
