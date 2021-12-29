@@ -104,11 +104,13 @@ void Game::CreateRootSigAndPipelineState()
 		inputElements[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;
 		inputElements[0].SemanticName = "POSITION";
 		inputElements[0].SemanticIndex = 0;
+
 		// Set up the second element - a UV, which is 2 more float values
 		inputElements[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;	// After the previous element
 		inputElements[1].Format = DXGI_FORMAT_R32G32_FLOAT;			// 2x 32-bit floats
 		inputElements[1].SemanticName = "TEXCOORD";					// Match our vertex shader input!
 		inputElements[1].SemanticIndex = 0;
+
 		// Set up the third element - a normal, which is 3 more float values
 		inputElements[2].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;	// After the previous element
 		inputElements[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;		// 3x 32-bit floats
@@ -183,14 +185,6 @@ void Game::CreateRootSigAndPipelineState()
 		rootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 		rootParams[2].DescriptorTable.NumDescriptorRanges = 1;
 		rootParams[2].DescriptorTable.pDescriptorRanges = &srvRange;
-
-		//// Describe and serialize the root signature
-		//D3D12_ROOT_SIGNATURE_DESC rootSig = {};
-		//rootSig.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-		//rootSig.NumParameters = 1;
-		//rootSig.pParameters = &rootParam;
-		//rootSig.NumStaticSamplers = 0;
-		//rootSig.pStaticSamplers = 0;
 
 		//Create static sampler, only works for this exercise
 		//Eventually materials will have their own samplers.
@@ -292,7 +286,7 @@ void Game::CreateRootSigAndPipelineState()
 void Game::CreateBasicGeometry()
 {
 	//Macro for texture loading
-#define LoadTexture(x) DX12Helper::GetInstance().LoadTexture(GetFullPathTo_Wide(x).c_str())
+#define LoadTexture(x) DX12Helper::GetInstance().LoadTexture(GetFullPathTo_Wide(x).c_str(), false)
 
 	//Load Texture(s)
 	D3D12_CPU_DESCRIPTOR_HANDLE bronzeAlbedo = LoadTexture(L"../../Assets/Textures/bronze_albedo.png");
@@ -378,7 +372,7 @@ void Game::Update(float deltaTime, float totalTime)
 	// Spin entities
 	for (auto& e : entities)
 	{
-		//e->GetTransform()->Rotate(0, deltaTime * 0.5f, 0);
+		e->GetTransform()->Rotate(0, deltaTime * 0.5f, 0);
 	}
 
 	// Other updates
@@ -406,7 +400,7 @@ void Game::Draw(float deltaTime, float totalTime)
 		rb.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 		commandList->ResourceBarrier(1, &rb);
 		// Background color (Cornflower Blue in this case) for clearing
-		float color[] = { 0.0f, 0.0f, 0.0f, 1.0f }; //Remember to set this to black once we have moved on past the first step.
+		float color[] = { 0, 0, 0, 1.0f }; //Remember to set this to black once we have moved on past the first step.
 		// Clear the RTV
 		commandList->ClearRenderTargetView(
 			rtvHandles[currentSwapBuffer],
@@ -423,10 +417,6 @@ void Game::Draw(float deltaTime, float totalTime)
 
 	// Rendering here!
 	{
-
-		// Set overall pipeline state
-		//commandList->SetPipelineState(pipelineState.Get());
-
 		// Root sig (must happen before root descriptor table)
 		commandList->SetGraphicsRootSignature(rootSignature.Get());
 

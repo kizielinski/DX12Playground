@@ -22,7 +22,7 @@ struct VertexToPixel
 //Defines texture variable for all texture resources
 Texture2D AlbedoTexture   : register(t0); // <- T for textures.
 Texture2D NormalMap       : register(t1); //<- 2nd texture for processing normal map
-Texture2D RoughnessMap        : register(t2); //<- 3rd texture for processing rough map
+Texture2D RoughnessMap    : register(t2); //<- 3rd texture for processing rough map
 Texture2D MetalMap        : register(t3); //<- 4th texture for processing metal map
 SamplerState BasicSampler : register(s0); // <- S for sampler register
 
@@ -80,6 +80,6 @@ float4 main(VertexToPixel input) : SV_TARGET
 
 	// Gamma correct and return
 	//return float4(pow(totalLight, 1.0f / 2.2f), 1.0f);
-	return float4(255, 0, 0, 255);
-	//return float4(input.normal, 1);
+	//return float4(255, 0, 0, 255);
+	return float4(surfaceColor.rgb, 1);
 }
