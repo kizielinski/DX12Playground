@@ -168,16 +168,18 @@ Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> DX12Helper::GetConstantBufferDescri
 // dataSizeInBytes - The byte size of the data to copy
 D3D12_GPU_DESCRIPTOR_HANDLE DX12Helper::FillNextConstantBufferAndGetGPUDescriptorHandle(void* data, unsigned int dataSizeInBytes)
 {
-	D3D12_GPU_VIRTUAL_ADDRESS virtualGPUAddress = cbUploadHeap->GetGPUVirtualAddress() + cbUploadHeapOffsetInBytes;
-
 	//CBVs point to a memory chunk of multiple of 256
 	//Calculate and reserve this amount
 	SIZE_T reservationSize = (SIZE_T)dataSizeInBytes;
 	reservationSize = (reservationSize + 255); //Adds 255 to drop the last few bits
 	reservationSize = (reservationSize & ~255); //Flip it so it can be used to mask
 
-	if(cbUploadHeapOffsetInBytes + reservationSize>= cbUploadHeapSizeInBytes)
+	if(cbUploadHeapOffsetInBytes + reservationSize >= cbUploadHeapSizeInBytes)
 	{ cbUploadHeapOffsetInBytes = 0; }
+
+	// Where in the upload heap will this data go?
+	D3D12_GPU_VIRTUAL_ADDRESS virtualGPUAddress =
+		cbUploadHeap->GetGPUVirtualAddress() + cbUploadHeapOffsetInBytes;
 
 	// === Copy data to the upload heap ===
 	{
@@ -204,7 +206,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE DX12Helper::FillNextConstantBufferAndGetGPUDescripto
 	
 		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
 		cbvDesc.BufferLocation = virtualGPUAddress;
-		cbvDesc.SizeInBytes = (UINT)reservationSize;
+		cbvDesc.SizeInBytes = (unsigned int)reservationSize;
 
 		device->CreateConstantBufferView(&cbvDesc, cpuHandle);
 
@@ -337,3 +339,4 @@ void DX12Helper::CreateCBVSRVDescriptorHeap()
 	cbvDescriptorOffset = 0;
 
 }
+

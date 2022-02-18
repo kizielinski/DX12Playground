@@ -1,9 +1,15 @@
+#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+
 #include "DXCore.h"
 #include "Input.h"
 #include "DX12Helper.h"
 
 #include <WindowsX.h>
 #include <sstream>
+
+#include <filesystem>
+#include <shlobj.h>
+#include <codecvt>
 
 // Define the static instance variable so our OS-level 
 // message handling function below can talk to our object
@@ -174,6 +180,13 @@ HRESULT DXCore::InitDirectX()
 	D3D12GetDebugInterface(IID_PPV_ARGS(&debugController));
 	debugController->EnableDebugLayer();
 #endif
+
+	//WinPixGpuCapturer.dll has been injected into the application.
+	
+	using convert_type = std::codecvt_utf8<wchar_t>;
+	std::wstring_convert<convert_type, wchar_t> converter;
+	std::string pixPath = converter.to_bytes(GetLatestWinPixGpuCapturerPath_Cpp17());
+	LoadLibrary(pixPath.c_str());
 
 	// Result variable for below function calls
 	HRESULT hr = S_OK;
@@ -867,3 +880,31 @@ LRESULT DXCore::ProcessMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 	return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
+std::wstring DXCore::GetLatestWinPixGpuCapturerPath_Cpp17()
+{
+	LPWSTR programFilesPath = nullptr;
+	SHGetKnownFolderPath(FOLDERID_ProgramFiles, KF_FLAG_DEFAULT, NULL, &programFilesPath);
+
+	std::filesystem::path pixInstallationPath = programFilesPath;
+	pixInstallationPath /= "Microsoft PIX";
+
+	std::wstring newestVersionFound;
+
+	for (auto const& directory_entry : std::filesystem::directory_iterator(pixInstallationPath))
+	{
+		if (directory_entry.is_directory())
+		{
+			if (newestVersionFound.empty() || newestVersionFound < directory_entry.path().filename().c_str())
+			{
+				newestVersionFound = directory_entry.path().filename().c_str();
+			}
+		}
+	}
+
+	if (newestVersionFound.empty())
+	{
+		// TODO: Error, no PIX installation found
+	}
+
+	return pixInstallationPath / newestVersionFound / L"WinPixGpuCapturer.dll";
+}

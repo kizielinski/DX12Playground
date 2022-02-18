@@ -98,6 +98,7 @@ protected:
 
 	std::string GetFullPathTo(std::string relativeFilePath);
 	std::wstring GetFullPathTo_Wide(std::wstring relativeFilePath);
+	std::wstring GetLatestWinPixGpuCapturerPath_Cpp17();
 
 
 private:

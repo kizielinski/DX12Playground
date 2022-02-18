@@ -3,6 +3,7 @@
 #include "Input.h"
 #include "BufferStructs.h"
 #include "DX12Helper.h"
+#include <iostream>
 //#include "Material.h" ? already in Entity class
 
 #include <stdlib.h> //Seeding random and rand()
@@ -14,9 +15,10 @@
 
 // For the DirectX Math library
 using namespace DirectX;
+using namespace std;
 
 #define RandomRange(min, max) (float)rand() / RAND_MAX * max - min + min
-
+int frameCount;
 // --------------------------------------------------------
 // Constructor
 //
@@ -147,7 +149,7 @@ void Game::CreateRootSigAndPipelineState()
 		//Describe the range of CBVs needed for pixel shader
 		D3D12_DESCRIPTOR_RANGE cbvRangePS = {};
 		cbvRangePS.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-		cbvRangePS.NumDescriptors = 1;
+		cbvRangePS.NumDescriptors = 2;
 		cbvRangePS.BaseShaderRegister = 0;
 		cbvRangePS.RegisterSpace = 0;
 		cbvRangePS.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -386,6 +388,8 @@ void Game::Draw(float deltaTime, float totalTime)
 {
 	DX12Helper& dx12Helper = DX12Helper::GetInstance();
 
+	std::cout << "Step: Clear and Grab Buffers" << std::endl;
+
 	// Grab the current back buffer for this frame
 	Microsoft::WRL::ComPtr<ID3D12Resource> currentBackBuffer = backBuffers[currentSwapBuffer];
 	// Clearing the render target
@@ -415,7 +419,9 @@ void Game::Draw(float deltaTime, float totalTime)
 			0, 0); // No scissor rects
 	}
 
-	// Rendering here!
+	std::cout << "Step: Render" << std::endl;
+
+	//Rendering here!
 	{
 		// Root sig (must happen before root descriptor table)
 		commandList->SetGraphicsRootSignature(rootSignature.Get());
@@ -464,7 +470,7 @@ void Game::Draw(float deltaTime, float totalTime)
 				psData.uvScale = mat->GetUVScale();
 				psData.uvOffset = mat->GetUVOffset();
 				psData.cameraPosition = camera->GetPosition();
-				psData.lightCount =  8;//lightCount;
+				psData.lightCount =  1;//lightCount;
 				memcpy(psData.lights, &lights[0], sizeof(Light) * MAX_LIGHTS);
 
 				// Send this to a chunk of the constant buffer heap
@@ -496,7 +502,10 @@ void Game::Draw(float deltaTime, float totalTime)
 			commandList->DrawIndexedInstanced(mesh->GetIndexCount(), 1, 0, 0, 0);
 		}
 	}
-	// Present
+
+	std::cout << "Step: Present " << std::endl;
+
+	 //Present
 	{
 		// Transition back to present
 		D3D12_RESOURCE_BARRIER rb = {};
@@ -520,4 +529,7 @@ void Game::Draw(float deltaTime, float totalTime)
 		if (currentSwapBuffer >= numBackBuffers)
 			currentSwapBuffer = 0;
 	}
+	frameCount++;
+	std::cout << "Frame Count: ";
+	std::cout << frameCount << std::endl;
 }
