@@ -32,4 +32,3 @@ private:
 	Transform transform;
 	POINT prevMousePosition;
 };
-

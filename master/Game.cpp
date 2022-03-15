@@ -17,7 +17,7 @@
 using namespace DirectX;
 using namespace std;
 
-#define RandomRange(min, max) (float)rand() / RAND_MAX * max - min + min
+#define RandomRange(min, max) (float)rand() / RAND_MAX * (max - min) + min
 int frameCount;
 // --------------------------------------------------------
 // Constructor
@@ -62,7 +62,7 @@ void Game::Init()
 {
 	//Random time!
 	srand((unsigned int)time(0));
-
+	lightCount = 0;
 	// Helper methods for loading shaders, creating some basic
 	// geometry to draw and some simple camera matrices.
 	//  - You'll be expanding and/or replacing these later
@@ -83,14 +83,13 @@ void Game::CreateRootSigAndPipelineState()
 	// Blobs to hold raw shader byte code used in several steps below
 	Microsoft::WRL::ComPtr<ID3DBlob> vertexShaderByteCode;
 	Microsoft::WRL::ComPtr<ID3DBlob> pixelShaderByteCode;
+
 	// Load shaders
 	{
 		// Read our compiled vertex shader code into a blob
 		// - Essentially just "open the file and plop its contents here"
-		D3DReadFileToBlob(GetFullPathTo_Wide(L"VertexShader.cso").c_str(),
-			vertexShaderByteCode.GetAddressOf());
-		D3DReadFileToBlob(GetFullPathTo_Wide(L"PixelShader.cso").c_str(),
-			pixelShaderByteCode.GetAddressOf());
+		D3DReadFileToBlob(GetFullPathTo_Wide(L"VertexShader.cso").c_str(), vertexShaderByteCode.GetAddressOf());
+		D3DReadFileToBlob(GetFullPathTo_Wide(L"PixelShader.cso").c_str(), pixelShaderByteCode.GetAddressOf());
 	}
 
 	// Input layout
@@ -101,17 +100,18 @@ void Game::CreateRootSigAndPipelineState()
 		// used by the vertex shader we're using
 		//  - This is used by the pipeline to know how to interpret the raw data
 		//     sitting inside a vertex buffer
+
 		// Set up the first element - a position, which is 3 float values
-		inputElements[0].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
-		inputElements[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-		inputElements[0].SemanticName = "POSITION";
-		inputElements[0].SemanticIndex = 0;
+		inputElements[0].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT; // How far into the vertex is this?  Assume it's after the previous element
+		inputElements[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;		// Most formats are described as color channels, really it just means "Three 32-bit floats"
+		inputElements[0].SemanticName = "POSITION";					// This is "POSITION" - needs to match the semantics in our vertex shader input!
+		inputElements[0].SemanticIndex = 0;							// This is the 0th position (there could be more)
 
 		// Set up the second element - a UV, which is 2 more float values
 		inputElements[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;	// After the previous element
 		inputElements[1].Format = DXGI_FORMAT_R32G32_FLOAT;			// 2x 32-bit floats
 		inputElements[1].SemanticName = "TEXCOORD";					// Match our vertex shader input!
-		inputElements[1].SemanticIndex = 0;
+		inputElements[1].SemanticIndex = 0;							// This is the 0th uv (there could be more)
 
 		// Set up the third element - a normal, which is 3 more float values
 		inputElements[2].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;	// After the previous element
@@ -123,21 +123,11 @@ void Game::CreateRootSigAndPipelineState()
 		inputElements[3].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;	// After the previous element
 		inputElements[3].Format = DXGI_FORMAT_R32G32B32_FLOAT;		// 3x 32-bit floats
 		inputElements[3].SemanticName = "TANGENT";					// Match our vertex shader input!
-		inputElements[3].SemanticIndex = 0;
+		inputElements[3].SemanticIndex = 0;							// This is the 0th tangent (there could be more)
 	}
 
 	// Root Signature
 	{
-		//// Create a table of CBV's (constant buffer views)
-		//D3D12_DESCRIPTOR_RANGE cbvTable = {};
-		//cbvTable.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-		//cbvTable.NumDescriptors = 1;
-		//cbvTable.BaseShaderRegister = 0;
-		//cbvTable.RegisterSpace = 0;
-		//cbvTable.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-		//*New*
-
 		// Describe the range of CBVs needed for the vertex shader
 		D3D12_DESCRIPTOR_RANGE cbvRangeVS = {};
 		cbvRangeVS.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
@@ -146,10 +136,10 @@ void Game::CreateRootSigAndPipelineState()
 		cbvRangeVS.RegisterSpace = 0;
 		cbvRangeVS.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-		//Describe the range of CBVs needed for pixel shader
+		// Describe the range of CBVs needed for the pixel shader
 		D3D12_DESCRIPTOR_RANGE cbvRangePS = {};
 		cbvRangePS.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-		cbvRangePS.NumDescriptors = 2;
+		cbvRangePS.NumDescriptors = 1;
 		cbvRangePS.BaseShaderRegister = 0;
 		cbvRangePS.RegisterSpace = 0;
 		cbvRangePS.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -162,34 +152,29 @@ void Game::CreateRootSigAndPipelineState()
 		srvRange.RegisterSpace = 0;
 		srvRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-		//// Create the root parameter <-- Depricated, we now use multiple rootParams.
-		//D3D12_ROOT_PARAMETER rootParam = {};
-		//rootParam.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-		//rootParam.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-		//rootParam.DescriptorTable.NumDescriptorRanges = 1;
-		//rootParam.DescriptorTable.pDescriptorRanges = &cbvTable;
-
+		// Create the root parameters
 		D3D12_ROOT_PARAMETER rootParams[3] = {};
 
-		//Definitions same as original one, just now for each piece (PS, VS, SRVs)
-
+		// CBV table param for vertex shader
 		rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 		rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 		rootParams[0].DescriptorTable.NumDescriptorRanges = 1;
 		rootParams[0].DescriptorTable.pDescriptorRanges = &cbvRangeVS;
 
+		// CBV table param for vertex shader
 		rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 		rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 		rootParams[1].DescriptorTable.NumDescriptorRanges = 1;
 		rootParams[1].DescriptorTable.pDescriptorRanges = &cbvRangePS;
 
+		// SRV table param
 		rootParams[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 		rootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 		rootParams[2].DescriptorTable.NumDescriptorRanges = 1;
 		rootParams[2].DescriptorTable.pDescriptorRanges = &srvRange;
 
-		//Create static sampler, only works for this exercise
-		//Eventually materials will have their own samplers.
+		// Create a single static sampler (available to all pixel shaders at the same slot)
+		// Note: This is in lieu of having materials have their own samplers for this demo
 		D3D12_STATIC_SAMPLER_DESC anisoWrap = {};
 		anisoWrap.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 		anisoWrap.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
@@ -197,7 +182,7 @@ void Game::CreateRootSigAndPipelineState()
 		anisoWrap.Filter = D3D12_FILTER_ANISOTROPIC;
 		anisoWrap.MaxAnisotropy = 16;
 		anisoWrap.MaxLOD = D3D12_FLOAT32_MAX;
-		anisoWrap.ShaderRegister = 0; //register (0)
+		anisoWrap.ShaderRegister = 0;  // register(s0)
 		anisoWrap.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
 		D3D12_STATIC_SAMPLER_DESC samplers[] = { anisoWrap };
@@ -242,6 +227,9 @@ void Game::CreateRootSigAndPipelineState()
 		psoDesc.InputLayout.NumElements = inputElementCount;
 		psoDesc.InputLayout.pInputElementDescs = inputElements;
 		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+		// Overall primitive topology type (triangle, line, etc.) is set here 
+		// IASetPrimTop() is still used to set list/strip/adj options
+		// See: https://docs.microsoft.com/en-us/windows/desktop/direct3d12/managing-graphics-pipeline-state-in-direct3d-12
 
 		// Root sig
 		psoDesc.pRootSignature = rootSignature.Get();
@@ -288,7 +276,7 @@ void Game::CreateRootSigAndPipelineState()
 void Game::CreateBasicGeometry()
 {
 	//Macro for texture loading
-#define LoadTexture(x) DX12Helper::GetInstance().LoadTexture(GetFullPathTo_Wide(x).c_str(), false)
+#define LoadTexture(x) DX12Helper::GetInstance().LoadTexture(GetFullPathTo_Wide(x).c_str())
 
 	//Load Texture(s)
 	D3D12_CPU_DESCRIPTOR_HANDLE bronzeAlbedo = LoadTexture(L"../../Assets/Textures/bronze_albedo.png");
@@ -470,7 +458,7 @@ void Game::Draw(float deltaTime, float totalTime)
 				psData.uvScale = mat->GetUVScale();
 				psData.uvOffset = mat->GetUVOffset();
 				psData.cameraPosition = camera->GetPosition();
-				psData.lightCount =  1;//lightCount;
+				psData.lightCount = MAX_LIGHTS;//lightCount;
 				memcpy(psData.lights, &lights[0], sizeof(Light) * MAX_LIGHTS);
 
 				// Send this to a chunk of the constant buffer heap

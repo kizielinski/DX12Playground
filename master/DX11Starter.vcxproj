@@ -176,6 +176,7 @@
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
+    <None Include="LightingChrisSource.hlsli" />
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

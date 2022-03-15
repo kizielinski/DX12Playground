@@ -32,10 +32,11 @@ VertexToPixel main( VertexShaderInput input )
 	// Set up output struct
 	VertexToPixel output;
 
+	// Calc screen position
 	matrix wvp = mul(projection, mul(view, world));
 	output.screenPosition = mul(wvp, float4(input.localPosition, 1.0f));
 
-	//World space lighting vectors
+	// Make sure the lighting vectors are in world space
 	output.normal = normalize(mul((float3x3)worldInverseTranspose, input.normal));
 	output.tangent = normalize(mul((float3x3)worldInverseTranspose, input.tangent));
 

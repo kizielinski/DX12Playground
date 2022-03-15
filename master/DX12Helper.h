@@ -107,6 +107,15 @@ private:
 	//they only reduce amount of possible current buffers at a given time.
 	const unsigned int maxConstantBuffers = 1000;
 
+	// Maximum number of texture descriptors (SRVs) we can have.
+	// Each material will have a chunk of this, plus any 
+	// non-material textures we may need for our program.
+	// Note: If we delayed the creation of this heap until 
+	//       after all textures and materials were created,
+	//       we could come up with an exact amount.  The following
+	//       constant ensures we (hopefully) never run out of room.
+	const unsigned int maxTextureDescriptors = 1000;
+
 	//GPU-side constant buffer upload heap
 	Microsoft::WRL::ComPtr<ID3D12Resource> cbUploadHeap;
 	UINT64 cbUploadHeapSizeInBytes;
