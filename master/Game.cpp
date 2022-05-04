@@ -212,6 +212,7 @@ void Game::CreateRootSigAndPipelineState()
 		rootParams[2].DescriptorTable.NumDescriptorRanges = 1;
 		rootParams[2].DescriptorTable.pDescriptorRanges = &srvRange;
 
+		//Tried putting ImGui in it's own rootParam that didn't work.
 		//rootParams[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 		//rootParams[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 		//rootParams[3].DescriptorTable.NumDescriptorRanges = 1;
@@ -525,76 +526,77 @@ void Game::Draw(float deltaTime, float totalTime)
 		commandList->RSSetScissorRects(1, &scissorRect);
 		commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		//Add ImGui to Render Queue
-		{
-			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList.Get());
-		}
-
-		//for (auto& e : entities)
+		////Add ImGui to Render Queue
 		//{
-		//	// Grab the material for this entity
-		//	std::shared_ptr<Material> mat = e->GetMaterial();
-
-		//	// Set the pipeline state for this material
-		//	commandList->SetPipelineState(mat->GetPipelineState().Get());
-
-		//	// Set up the vertex shader data we intend to use for drawing this entity
-		//	{
-		//		VertexShaderExternalData vsData = {};
-		//		vsData.world = e->GetTransform()->GetWorldMatrix();
-		//		vsData.worldInverseTranspose = e->GetTransform()->GetWorldITMatrix();
-		//		vsData.view = camera->GetViewMatrix();
-		//		vsData.projection = camera->GetProjectionMatrix();
-
-		//		// Send this to a chunk of the constant buffer heap
-		//		// and grab the GPU handle for it so we can set it for this draw
-		//		D3D12_GPU_DESCRIPTOR_HANDLE cbHandleVS = dx12Helper.FillNextConstantBufferAndGetGPUDescriptorHandle(
-		//			(void*)(&vsData), sizeof(VertexShaderExternalData));
-
-		//		// Set this constant buffer handle
-		//		// Note: This assumes that descriptor table 0 is the
-		//		//       place to put this particular descriptor.  This
-		//		//       is based on how we set up our root signature.
-		//		commandList->SetGraphicsRootDescriptorTable(0, cbHandleVS);
-		//	}
-
-		//	// Pixel shader data and cbuffer setup
-		//	{
-		//		PixelShaderExternalData psData = {};
-		//		psData.uvScale = mat->GetUVScale();
-		//		psData.uvOffset = mat->GetUVOffset();
-		//		psData.cameraPosition = camera->GetPosition();
-		//		psData.lightCount = MAX_LIGHTS;//lightCount;
-		//		memcpy(psData.lights, &lights[0], sizeof(Light) * MAX_LIGHTS);
-
-		//		// Send this to a chunk of the constant buffer heap
-		//		// and grab the GPU handle for it so we can set it for this draw
-		//		D3D12_GPU_DESCRIPTOR_HANDLE cbHandlePS = dx12Helper.FillNextConstantBufferAndGetGPUDescriptorHandle(
-		//			(void*)(&psData), sizeof(PixelShaderExternalData));
-
-		//		// Set this constant buffer handle
-		//		// Note: This assumes that descriptor table 1 is the
-		//		//       place to put this particular descriptor.  This
-		//		//       is based on how we set up our root signature.
-		//		commandList->SetGraphicsRootDescriptorTable(1, cbHandlePS);
-		//	}
-
-		//	// Set the SRV descriptor handle for this material's textures
-		//	// Note: This assumes that descriptor table 2 is for textures (as per our root sig)
-		//	commandList->SetGraphicsRootDescriptorTable(2, mat->GetFinalGPUHandleForTextures());
-
-		//	// Grab the mesh and its buffer views
-		//	std::shared_ptr<Mesh> mesh = e->GetMesh();
-		//	D3D12_VERTEX_BUFFER_VIEW vbv = mesh->GetVB();
-		//	D3D12_INDEX_BUFFER_VIEW  ibv = mesh->GetIB();
-
-		//	// Set the geometry
-		//	commandList->IASetVertexBuffers(0, 1, &vbv);
-		//	commandList->IASetIndexBuffer(&ibv);
-
-		//	// Draw
-		//	commandList->DrawIndexedInstanced(mesh->GetIndexCount(), 1, 0, 0, 0);
+		//  //Backend is deprecated as of newest version which causes issues with this call normally without having to rewrite.
+		//	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList.Get());
 		//}
+
+		for (auto& e : entities)
+		{
+			// Grab the material for this entity
+			std::shared_ptr<Material> mat = e->GetMaterial();
+
+			// Set the pipeline state for this material
+			commandList->SetPipelineState(mat->GetPipelineState().Get());
+
+			// Set up the vertex shader data we intend to use for drawing this entity
+			{
+				VertexShaderExternalData vsData = {};
+				vsData.world = e->GetTransform()->GetWorldMatrix();
+				vsData.worldInverseTranspose = e->GetTransform()->GetWorldITMatrix();
+				vsData.view = camera->GetViewMatrix();
+				vsData.projection = camera->GetProjectionMatrix();
+
+				// Send this to a chunk of the constant buffer heap
+				// and grab the GPU handle for it so we can set it for this draw
+				D3D12_GPU_DESCRIPTOR_HANDLE cbHandleVS = dx12Helper.FillNextConstantBufferAndGetGPUDescriptorHandle(
+					(void*)(&vsData), sizeof(VertexShaderExternalData));
+
+				// Set this constant buffer handle
+				// Note: This assumes that descriptor table 0 is the
+				//       place to put this particular descriptor.  This
+				//       is based on how we set up our root signature.
+				commandList->SetGraphicsRootDescriptorTable(0, cbHandleVS);
+			}
+
+			// Pixel shader data and cbuffer setup
+			{
+				PixelShaderExternalData psData = {};
+				psData.uvScale = mat->GetUVScale();
+				psData.uvOffset = mat->GetUVOffset();
+				psData.cameraPosition = camera->GetPosition();
+				psData.lightCount = MAX_LIGHTS;//lightCount;
+				memcpy(psData.lights, &lights[0], sizeof(Light) * MAX_LIGHTS);
+
+				// Send this to a chunk of the constant buffer heap
+				// and grab the GPU handle for it so we can set it for this draw
+				D3D12_GPU_DESCRIPTOR_HANDLE cbHandlePS = dx12Helper.FillNextConstantBufferAndGetGPUDescriptorHandle(
+					(void*)(&psData), sizeof(PixelShaderExternalData));
+
+				// Set this constant buffer handle
+				// Note: This assumes that descriptor table 1 is the
+				//       place to put this particular descriptor.  This
+				//       is based on how we set up our root signature.
+				commandList->SetGraphicsRootDescriptorTable(1, cbHandlePS);
+			}
+
+			// Set the SRV descriptor handle for this material's textures
+			// Note: This assumes that descriptor table 2 is for textures (as per our root sig)
+			commandList->SetGraphicsRootDescriptorTable(2, mat->GetFinalGPUHandleForTextures());
+
+			// Grab the mesh and its buffer views
+			std::shared_ptr<Mesh> mesh = e->GetMesh();
+			D3D12_VERTEX_BUFFER_VIEW vbv = mesh->GetVB();
+			D3D12_INDEX_BUFFER_VIEW  ibv = mesh->GetIB();
+
+			// Set the geometry
+			commandList->IASetVertexBuffers(0, 1, &vbv);
+			commandList->IASetIndexBuffer(&ibv);
+
+			// Draw
+			commandList->DrawIndexedInstanced(mesh->GetIndexCount(), 1, 0, 0, 0);
+		}
 	}
 
 	std::cout << "Step: Present " << std::endl;

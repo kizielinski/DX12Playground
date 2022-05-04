@@ -74,6 +74,7 @@ public:
 		D3D12_CPU_DESCRIPTOR_HANDLE firstDescriptorToCopy, unsigned int numDescriptorsToCopy
 	);
 
+	//Handle for ImGui descriptor
 	D3D12_GPU_DESCRIPTOR_HANDLE CreateImGuiGPUHandle(D3D12_CPU_DESCRIPTOR_HANDLE firstDescriptorToCopy);
 
 	// Command list & synchronization
@@ -136,6 +137,8 @@ private:
 
 	void CreateConstantBufferUploadHeap();
 	void CreateCBVSRVDescriptorHeap();
+
+	//Tried making ImGui use a unique descriptorHeap, but that didn't solve issue.
 	void CreateImGuiDescriptorHeap();
 
 	//Texture fields
