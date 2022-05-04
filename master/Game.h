@@ -59,5 +59,11 @@ private:
 	std::vector<Light> lights;
 	std::shared_ptr<Camera> camera;
 	std::vector<std::shared_ptr<Entity>> entities;
+
+	//ImGui Init data
+	static int const NUM_FRAMES_IN_FLIGHT = 3;
+	bool showDemoWindow;
+	bool showFluidWindow;
+	D3D12_CPU_DESCRIPTOR_HANDLE imGuiHandle;
 };
 

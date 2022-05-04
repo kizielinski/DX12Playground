@@ -56,6 +56,11 @@ public:
 	//Function for general static buffer (aka resource creation)
 	Microsoft::WRL::ComPtr<ID3D12Resource> CreateStaticBuffer(unsigned int dataStride, unsigned int dataCount, void* data);
 
+	//Create Descriptor entry for ImGui
+	void LoadImGui();
+	//Getter for said descriptor ^
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> GetImGuiDescriptorHeap();
+
 	//More resource creation, load textures
 	D3D12_CPU_DESCRIPTOR_HANDLE LoadTexture(const wchar_t* file, bool generateMips = true);
 
@@ -69,6 +74,7 @@ public:
 		D3D12_CPU_DESCRIPTOR_HANDLE firstDescriptorToCopy, unsigned int numDescriptorsToCopy
 	);
 
+	D3D12_GPU_DESCRIPTOR_HANDLE CreateImGuiGPUHandle(D3D12_CPU_DESCRIPTOR_HANDLE firstDescriptorToCopy);
 
 	// Command list & synchronization
 	void CloseExecuteAndResetCommandList();
@@ -130,8 +136,11 @@ private:
 
 	void CreateConstantBufferUploadHeap();
 	void CreateCBVSRVDescriptorHeap();
+	void CreateImGuiDescriptorHeap();
 
 	//Texture fields
 	std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> textures;
 	std::vector<Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>> cpuSideTextureDescriptorHeaps;
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> cpuSideImGuiHeap;
+	D3D12_CPU_DESCRIPTOR_HANDLE imGuiCPUHandle;
 };

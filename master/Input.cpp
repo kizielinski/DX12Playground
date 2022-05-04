@@ -1,5 +1,6 @@
 #include "Input.h"
-
+#include "ImGUI/imgui.h"
+#include "ImGUI/imgui_impl_win32.h"
 // Singleton requirement
 Input* Input::instance;
 
@@ -94,27 +95,35 @@ void Input::Initialize(HWND windowHandle)
 // ----------------------------------------------------------
 void Input::Update()
 {
-	// Copy the old keys so we have last frame's data
-	memcpy(prevKbState, kbState, sizeof(unsigned char) * 256);
+	if (ImGui::GetIO().WantCaptureMouse || ImGui::GetIO().WantCaptureKeyboard)
+	{
+		ImGui::CaptureMouseFromApp();
+		ImGui::CaptureKeyboardFromApp();
+	}
+	else 
+	{
+		// Copy the old keys so we have last frame's data
+		memcpy(prevKbState, kbState, sizeof(unsigned char) * 256);
 
-	// Get the latest keys (from Windows)
-	// Note the use of (void), which denotes to the compiler
-	// that we're intentionally ignoring the return value
-	(void)GetKeyboardState(kbState);
+		// Get the latest keys (from Windows)
+		// Note the use of (void), which denotes to the compiler
+		// that we're intentionally ignoring the return value
+		(void)GetKeyboardState(kbState);
 
-	// Get the current mouse position then make it relative to the window
-	POINT mousePos = {};
-	GetCursorPos(&mousePos);
-	ScreenToClient(windowHandle, &mousePos);
+		// Get the current mouse position then make it relative to the window
+		POINT mousePos = {};
+		GetCursorPos(&mousePos);
+		ScreenToClient(windowHandle, &mousePos);
 
-	// Save the previous mouse position, then the current mouse 
-	// position and finally calculate the change from the previous frame
-	prevMouseX = mouseX;
-	prevMouseY = mouseY;
-	mouseX = mousePos.x;
-	mouseY = mousePos.y;
-	mouseXDelta = mouseX - prevMouseX;
-	mouseYDelta = mouseY - prevMouseY;
+		// Save the previous mouse position, then the current mouse 
+		// position and finally calculate the change from the previous frame
+		prevMouseX = mouseX;
+		prevMouseY = mouseY;
+		mouseX = mousePos.x;
+		mouseY = mousePos.y;
+		mouseXDelta = mouseX - prevMouseX;
+		mouseYDelta = mouseY - prevMouseY;
+	}
 }
 
 // ----------------------------------------------------------
